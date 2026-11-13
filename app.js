@@ -129,6 +129,7 @@
   function enterOverview(initial) {
     view = "overview";
     document.body.classList.remove("in-course");
+    removeMask();
     clearMarkers();
     closePanel();
     addPill();
@@ -145,6 +146,7 @@
     document.body.classList.add("in-course");
     removePill();
     frameCourse();
+    showMask();
     renderMarkers();
     showCoursePanel();
   }
@@ -156,6 +158,40 @@
       padding: { top: 70, bottom: 70, left: 40, right: narrow ? 40 : 400 },
       pitch: 60, duration: 1300, maxZoom: 13.5,
     });
+  }
+
+  // Mask: tona ut kartan ljust utanför en korridor (~3 km) runt banan
+  const MASK_CLEAR_KM = 3;                 // helt synlig korridor
+  const MASK_RINGS = [4, 5, 6, 7, 8];      // utfasningszoner (km)
+  const MASK_OPS = [0.2, 0.4, 0.6, 0.78, 0.9];
+  const MASK_FAR_OP = 0.96;                // längst ut (nästan helt borta)
+  const MASK_COLOR = "#f6f4ee";            // ljus/papper
+
+  function showMask() {
+    if (!window.turf || !map.getLayer("route-casing")) return;
+    removeMask();
+    try {
+      const line = window.turf.lineString(window.ROUTE_GEOJSON.geometry.coordinates);
+      const radii = [MASK_CLEAR_KM, ...MASK_RINGS];
+      const buf = radii.map((r) => window.turf.buffer(line, r, { units: "kilometers" }));
+      const bb = window.turf.bbox(buf[buf.length - 1]);
+      const pad = 0.8;
+      const world = window.turf.bboxPolygon([bb[0] - pad, bb[1] - pad, bb[2] + pad, bb[3] + pad]);
+      const feats = [];
+      const outer = window.turf.difference(world, buf[buf.length - 1]);
+      if (outer) feats.push({ type: "Feature", properties: { op: MASK_FAR_OP }, geometry: outer.geometry });
+      for (let i = buf.length - 1; i >= 1; i--) {
+        const ring = window.turf.difference(buf[i], buf[i - 1]);
+        if (ring) feats.push({ type: "Feature", properties: { op: MASK_OPS[i - 1] }, geometry: ring.geometry });
+      }
+      map.addSource("mask", { type: "geojson", data: { type: "FeatureCollection", features: feats } });
+      map.addLayer({ id: "mask-fill", type: "fill", source: "mask",
+        paint: { "fill-color": MASK_COLOR, "fill-opacity": ["get", "op"], "fill-antialias": false } }, "route-casing");
+    } catch (e) { console.warn("Mask:", e); }
+  }
+  function removeMask() {
+    if (map.getLayer("mask-fill")) map.removeLayer("mask-fill");
+    if (map.getSource("mask")) map.removeSource("mask");
   }
 
   // =====================================================================
