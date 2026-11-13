@@ -77,7 +77,6 @@
     const start = CFG.START || { lng: 11.59, lat: 46.38, zoom: 10.3, pitch: 55, bearing: 15 };
     map = new maplibregl.Map({ container: "map", style: s.style, center: [start.lng, start.lat],
       zoom: start.zoom, pitch: start.pitch, bearing: start.bearing, maxPitch: 85, attributionControl: { compact: true } });
-    try { window.__MAP = map; } catch (e) {}
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
@@ -359,7 +358,7 @@
     if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
     const bnds = new maplibregl.LngLatBounds(); lf.coords.forEach((c) => bnds.extend(c));
     const narrow = window.innerWidth < 760;
-    map.fitBounds(bnds, { padding: { top: 90, bottom: 90, left: 50, right: narrow ? 50 : 420 }, pitch: 58, duration: 900, maxZoom: 15.5 });
+    map.fitBounds(bnds, { padding: { top: 80, bottom: 80, left: 40, right: narrow ? 40 : 340 }, pitch: 50, bearing: 0, duration: 900, maxZoom: 15 });
     renderLiftView(lf); openPanel();
   }
   function renderLiftView(lf) {
