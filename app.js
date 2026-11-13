@@ -77,6 +77,7 @@
     const start = CFG.START || { lng: 11.59, lat: 46.38, zoom: 10.3, pitch: 55, bearing: 15 };
     map = new maplibregl.Map({ container: "map", style: s.style, center: [start.lng, start.lat],
       zoom: start.zoom, pitch: start.pitch, bearing: start.bearing, maxPitch: 85, attributionControl: { compact: true } });
+    try { window.__MAP = map; } catch (e) {}
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
@@ -182,6 +183,9 @@
     showMask(b);
     renderMarkers();
     if (b.hasLifts && window.CANAZEI_LIFTS) renderLifts();
+    // håll liftlinjen överst (ovanför mask/overlay)
+    if (map.getLayer("lift-hl-casing")) map.moveLayer("lift-hl-casing");
+    if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
     showCoursePanel();
   }
   function exitCourse() { enterOverview(false); }
