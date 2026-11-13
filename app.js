@@ -364,10 +364,16 @@
   function renderLiftView(lf) {
     $("panelEdit").classList.add("hidden");
     const v = $("panelView"); v.classList.remove("hidden");
+    const lenTxt = lf.len != null ? (lf.len >= 1000 ? (lf.len / 1000).toFixed(1).replace(".", ",") + " km" : lf.len + " m") : "–";
+    const dropTxt = lf.drop != null ? lf.drop + " hm" : "–";
     v.innerHTML = `
       <button class="link-back" id="toList">‹ Tillbaka</button>
       <span class="wp-badge">🚠 ${esc(LIFT_TYPE_SV[lf.type] || "Lift")}</span>
       <h2 class="wp-title">${esc(lf.name)}</h2>
+      <div class="lift-stats">
+        <div class="lift-stat"><span class="ls-ic">📏</span><div><div class="ls-val">${lenTxt}</div><div class="ls-lbl">Längd</div></div></div>
+        <div class="lift-stat"><span class="ls-ic">⛰</span><div><div class="ls-val">${dropTxt}</div><div class="ls-lbl">Höjdmeter</div></div></div>
+      </div>
       <div class="wp-body">Liftens sträckning är markerad med en svart linje på kartan.</div>`;
     $("toList").addEventListener("click", showCoursePanel);
   }
