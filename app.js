@@ -123,8 +123,23 @@
     map.addLayer({ id: "lift-hl-l", type: "line", source: "lift-hl", layout: { "line-join": "round", "line-cap": "round" },
       paint: { "line-color": "#000000", "line-width": 4.5 } });
   }
+  function densify(coords, stepM) {
+    const out = [];
+    for (let i = 0; i < coords.length - 1; i++) {
+      const a = coords[i], b = coords[i + 1];
+      out.push(a);
+      const dLng = b[0] - a[0], dLat = b[1] - a[1];
+      const kx = Math.cos(a[1] * Math.PI / 180);
+      const distM = Math.hypot(dLat, dLng * kx) * 111320;
+      const n = Math.max(1, Math.floor(distM / stepM));
+      for (let j = 1; j < n; j++) out.push([a[0] + dLng * j / n, a[1] + dLat * j / n]);
+    }
+    out.push(coords[coords.length - 1]);
+    return out;
+  }
   function setLiftHighlight(coords) {
-    const s = map.getSource("lift-hl"); if (s) s.setData({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });
+    const s = map.getSource("lift-hl");
+    if (s) s.setData({ type: "Feature", geometry: { type: "LineString", coordinates: densify(coords, 40) }, properties: {} });
   }
   function clearLiftHighlight() {
     const s = map.getSource("lift-hl"); if (s) s.setData({ type: "FeatureCollection", features: [] });
@@ -340,7 +355,11 @@
     selectedId = null; markers.forEach((m) => m.getElement().classList.remove("sel"));
     liftMarkers.forEach((m, mid) => m.getElement().classList.toggle("sel", mid === id));
     setLiftHighlight(lf.coords);
-    map.easeTo({ center: lf.mid, duration: 700, offset: [window.innerWidth < 760 ? 0 : -160, 0] });
+    if (map.getLayer("lift-hl-casing")) map.moveLayer("lift-hl-casing");
+    if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
+    const bnds = new maplibregl.LngLatBounds(); lf.coords.forEach((c) => bnds.extend(c));
+    const narrow = window.innerWidth < 760;
+    map.fitBounds(bnds, { padding: { top: 90, bottom: 90, left: 50, right: narrow ? 50 : 420 }, pitch: 58, duration: 900, maxZoom: 15.5 });
     renderLiftView(lf); openPanel();
   }
   function renderLiftView(lf) {
