@@ -358,7 +358,7 @@
     if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
     const bnds = new maplibregl.LngLatBounds(); lf.coords.forEach((c) => bnds.extend(c));
     const narrow = window.innerWidth < 760;
-    map.fitBounds(bnds, { padding: { top: 80, bottom: 80, left: 40, right: narrow ? 40 : 340 }, pitch: 50, bearing: 0, duration: 900, maxZoom: 15 });
+    map.fitBounds(bnds, { padding: { top: 80, bottom: 80, left: 40, right: narrow ? 40 : 340 }, pitch: 0, bearing: 0, duration: 900, maxZoom: 15.5 });
     renderLiftView(lf); openPanel();
   }
   function renderLiftView(lf) {
