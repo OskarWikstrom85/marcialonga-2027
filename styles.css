@@ -114,3 +114,36 @@ body.editing .editbadge{display:block}
   #brand{max-width:60vw}
   .brand-title{font-size:16px}
 }
+
+/* ---- Två-lägesvy: översikt vs bana ---- */
+/* Etikett-pill på banan (översiktsläge) */
+.course-pill{display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+  background:rgba(15,23,32,.9);color:var(--text);border:1.5px solid var(--accent);
+  border-radius:999px;padding:9px 15px;font-weight:700;font-size:15px;white-space:nowrap;
+  box-shadow:0 6px 20px rgba(0,0,0,.45);transition:transform .12s,background .12s}
+.course-pill:hover{transform:scale(1.05);background:var(--accent);color:#1a0f08}
+.course-pill .cp-arrow{font-size:18px;opacity:.8}
+.course-pill .cp-ic{font-size:16px}
+
+/* Tillbaka-knapp (banläge) */
+.backbtn{display:none;position:absolute;top:14px;left:14px;z-index:7;align-items:center;
+  background:rgba(15,23,32,.82);backdrop-filter:blur(8px);color:var(--text);
+  border:1px solid var(--line);border-radius:12px;padding:9px 14px;font-size:14px;font-weight:600;
+  cursor:pointer;box-shadow:var(--shadow)}
+.backbtn:hover{border-color:var(--accent)}
+body.in-course .backbtn{display:inline-flex}
+body.in-course #brand{display:none}
+
+/* Listknapp (☰) bara i banläge */
+.fab{display:none}
+body.in-course .fab{display:flex;align-items:center;justify-content:center}
+
+/* Kurshuvud i panelen */
+.course-head{border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:14px}
+.course-name{font-size:21px;font-weight:800}
+.course-stats{color:var(--muted);font-size:13px;margin-top:3px}
+
+/* Tillbaka-till-listan-länk i punktvy */
+.link-back{background:none;border:none;color:var(--accent2);cursor:pointer;font-size:13px;
+  padding:0;margin:0 0 12px;display:inline-block}
+.link-back:hover{text-decoration:underline}
