@@ -12,9 +12,14 @@ create table if not exists public.waypoints (
   lng        double precision not null,
   lat        double precision not null,
   image_url  text,
+  area_id    text default 'marcialonga',    -- vilken bana punkten tillhör
   sort       int default 0,
   created_at timestamptz default now()
 );
+
+-- Om tabellen redan finns sedan tidigare, lägg till kolumnen:
+alter table public.waypoints add column if not exists area_id text default 'marcialonga';
+update public.waypoints set area_id = 'marcialonga' where area_id is null;
 
 -- 2) Radsäkerhet (RLS): alla får läsa, bara inloggade får ändra --------
 alter table public.waypoints enable row level security;
