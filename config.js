@@ -4,14 +4,13 @@
 // =====================================================================
 window.APP_CONFIG = {
   // --- Supabase (krävs för delad lagring, bilder och redigering) ---
-  // Hämtas i Supabase: Project Settings -> API
-  SUPABASE_URL: "",       // t.ex. "https://abcd1234.supabase.co"
-  SUPABASE_ANON_KEY: "",  // den publika "anon"-nyckeln (lång sträng)
+  // Hämtas i Supabase: Settings -> API Keys
+  SUPABASE_URL: "https://xunkuomfkgjrnkawuqwf.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_DJ4IBXXHTkIamxDc17ZkJw_xWm22hrF",
 
   // --- MapTiler (VALFRITT) ---
   // Lämna tomt så används gratis, nyckelfria kartlager (satellit + terräng).
   // Lägg in en gratis MapTiler-nyckel för snyggare karta med ortnamn.
-  // Hämtas på https://www.maptiler.com/ -> Account -> API keys
   MAPTILER_KEY: "",
 
   // --- Startvy ---
