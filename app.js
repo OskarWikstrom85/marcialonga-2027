@@ -73,6 +73,7 @@
         map.setTerrain({ source: s.terrainSource, exaggeration: CFG.TERRAIN_EXAGGERATION || 1.4 });
       } catch (e) { console.warn("Terräng:", e); }
       try { map.setSky && map.setSky({ "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 }); } catch (e) {}
+      addLabels();
       addRoute();
       enterOverview(true);
     });
@@ -81,6 +82,16 @@
     $("btnReset").addEventListener("click", () => {
       if (view === "course") frameCourse(); else resetOverview();
     });
+  }
+
+  // Ortnamns-lager (zoom-beroende). Hoppas över om MapTiler används (har egna namn).
+  function addLabels() {
+    if ((CFG.MAPTILER_KEY || "").trim()) return;
+    if (map.getSource("esri-ref")) return;
+    map.addSource("esri-ref", { type: "raster",
+      tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"],
+      tileSize: 256, maxzoom: 19, attribution: "Ortnamn © Esri" });
+    map.addLayer({ id: "place-labels", type: "raster", source: "esri-ref", paint: { "raster-opacity": 1 } });
   }
 
   function addRoute() {
