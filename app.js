@@ -161,8 +161,8 @@
   }
 
   // Mask: tona ut kartan ljust utanför en korridor (~3 km) runt banan
-  const MASK_CLEAR_KM = 3;                 // helt synlig korridor
-  const MASK_RINGS = [4, 5, 6, 7, 8];      // utfasningszoner (km)
+  const MASK_CLEAR_KM = 5;                 // helt synlig korridor
+  const MASK_RINGS = [6, 7, 8, 9, 10];     // utfasningszoner (km)
   const MASK_OPS = [0.2, 0.4, 0.6, 0.78, 0.9];
   const MASK_FAR_OP = 0.96;                // längst ut (nästan helt borta)
   const MASK_COLOR = "#f6f4ee";            // ljus/papper
