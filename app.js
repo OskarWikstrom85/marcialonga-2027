@@ -15,6 +15,9 @@
   const ICON_LABEL = { start: "Start", finish: "Mål", peak: "Topp/vändpunkt", food: "Vätska/mat", info: "Info", lift: "Lift/station", default: "Plats" };
   const ICON_ORDER = ["start", "finish", "peak", "food", "lift", "info", "default"];
   const BUCKET = "waypoint-images";
+  const LIFT_TYPE_SV = { gondola: "Kabinbana (gondol)", cable_car: "Linbana", chair_lift: "Stollift",
+    drag_lift: "Släplift", platter: "Tallrikslift", "t-bar": "Ankarlift", "j-bar": "J-bygellift",
+    magic_carpet: "Rullband", mixed_lift: "Kombibana", rope_tow: "Draglina" };
 
   // ---- Banor ----
   const BANOR = [
@@ -27,6 +30,7 @@
       bbox: [11.70, 46.43, 11.95, 46.58],
       overlay: "https://www.opensnowmap.org/pistes/{z}/{x}/{y}.png",
       overlayAttr: "Pister & liftar © OpenSnowMap, OpenStreetMap",
+      hasLifts: true,
       mask: { clearKm: 2, rings: [4, 7, 10, 14, 18] } },
   ];
   const MASK_OPS = [0.2, 0.4, 0.6, 0.78, 0.9];
@@ -40,6 +44,7 @@
   let editing = false, canEdit = false;
   let waypoints = [], usingDefaults = true;  // ALLA punkter (filtreras per bana)
   const markers = new Map();
+  const liftMarkers = new Map();
   const pills = [];
   let selectedId = null, draft = null, addMode = false;
 
@@ -110,6 +115,19 @@
     map.on("click", "route-hit", () => { if (view === "overview") enterBana(banaById("marcialonga")); });
     map.on("mouseenter", "route-hit", () => { if (view === "overview") map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", "route-hit", () => { map.getCanvas().style.cursor = ""; });
+    // Liftförstärkning (svart linje) – ligger överst
+    map.addSource("lift-hl", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({ id: "lift-hl-casing", type: "line", source: "lift-hl", layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.85 } });
+    map.addLayer({ id: "lift-hl-l", type: "line", source: "lift-hl", layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": "#000000", "line-width": 4.5 } });
+  }
+  function setLiftHighlight(coords) {
+    const s = map.getSource("lift-hl"); if (s) s.setData({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });
+  }
+  function clearLiftHighlight() {
+    const s = map.getSource("lift-hl"); if (s) s.setData({ type: "FeatureCollection", features: [] });
+    liftMarkers.forEach((m) => m.getElement().classList.remove("sel"));
   }
   function setRouteVisible(v) {
     ["route-casing", "route-line", "route-hit"].forEach((id) => {
@@ -143,7 +161,7 @@
   function enterOverview(initial) {
     view = "overview"; current = null;
     document.body.classList.remove("in-course");
-    removeMask(); removeOverlay(); clearMarkers(); closePanel();
+    removeMask(); removeOverlay(); clearMarkers(); clearLifts(); clearLiftHighlight(); closePanel();
     setRouteVisible(true);
     addPills();
     if (!initial) resetOverview();
@@ -157,11 +175,13 @@
     current = b; view = "course";
     document.body.classList.add("in-course");
     removePills();
+    clearLifts(); clearLiftHighlight();
     setRouteVisible(b.type === "route");
     removeOverlay(); if (b.overlay) addOverlay(b);
     frameCurrent();
     showMask(b);
     renderMarkers();
+    if (b.hasLifts && window.CANAZEI_LIFTS) renderLifts();
     showCoursePanel();
   }
   function exitCourse() { enterOverview(false); }
@@ -300,11 +320,42 @@
   }
   function syncDraggable() { markers.forEach((m, id) => m.setDraggable(editing && !usingDefaults && !String(id).startsWith("d"))); }
 
+  // ---- Liftar (statisk OSM-data, ej redigerbara) ----
+  function clearLifts() { liftMarkers.forEach((m) => m.remove()); liftMarkers.clear(); }
+  function renderLifts() {
+    clearLifts();
+    (window.CANAZEI_LIFTS || []).forEach((lf) => {
+      const el = document.createElement("div");
+      el.className = "mk liftmk"; el.textContent = "🚠"; el.title = lf.name;
+      el.addEventListener("click", (ev) => { ev.stopPropagation(); selectLift(lf.id); });
+      liftMarkers.set(lf.id, new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(lf.mid).addTo(map));
+    });
+  }
+  function selectLift(id) {
+    const lf = (window.CANAZEI_LIFTS || []).find((l) => l.id === id); if (!lf) return;
+    selectedId = null; markers.forEach((m) => m.getElement().classList.remove("sel"));
+    liftMarkers.forEach((m, mid) => m.getElement().classList.toggle("sel", mid === id));
+    setLiftHighlight(lf.coords);
+    map.easeTo({ center: lf.mid, duration: 700, offset: [window.innerWidth < 760 ? 0 : -160, 0] });
+    renderLiftView(lf); openPanel();
+  }
+  function renderLiftView(lf) {
+    $("panelEdit").classList.add("hidden");
+    const v = $("panelView"); v.classList.remove("hidden");
+    v.innerHTML = `
+      <button class="link-back" id="toList">‹ Tillbaka</button>
+      <span class="wp-badge">🚠 ${esc(LIFT_TYPE_SV[lf.type] || "Lift")}</span>
+      <h2 class="wp-title">${esc(lf.name)}</h2>
+      <div class="wp-body">Liftens sträckning är markerad med en svart linje på kartan.</div>`;
+    $("toList").addEventListener("click", showCoursePanel);
+  }
+
   // =====================================================================
   //  Panel
   // =====================================================================
   function showCoursePanel() {
     selectedId = null; markers.forEach((m) => m.getElement().classList.remove("sel"));
+    clearLiftHighlight();
     $("panelEdit").classList.add("hidden");
     const v = $("panelView"); v.classList.remove("hidden");
     const b = current, list = curWaypoints();
@@ -312,6 +363,9 @@
       const t = ICON_GLYPH[wp.icon] ? wp.icon : "default";
       return `<div class="list-item" data-id="${esc(String(wp.id))}"><div class="list-ic">${ICON_GLYPH[t]}</div><div class="list-txt">${esc(wp.title || "Namnlös")}</div></div>`;
     }).join("");
+    const lifts = (b.hasLifts && window.CANAZEI_LIFTS) ? window.CANAZEI_LIFTS : [];
+    const liftItems = lifts.map((lf) =>
+      `<div class="list-item" data-lift-id="${esc(lf.id)}"><div class="list-ic">🚠</div><div class="list-txt">${esc(lf.name)}<span class="list-sub">${esc(LIFT_TYPE_SV[lf.type] || "Lift")}</span></div></div>`).join("");
     v.innerHTML = `
       <div class="course-head">
         <div class="course-name">${b.icon} ${esc(b.name)}</div>
@@ -320,14 +374,17 @@
       <p class="list-head">Hållpunkter (${list.length})</p>
       ${items || '<p class="muted">Inga hållpunkter än.</p>'}
       ${editing ? `<div class="btns"><button class="btn-primary" id="addNew">+ Lägg till hållpunkt</button></div>`
-                : (canEdit ? `<p class="muted" style="margin-top:12px">Slå på redigering (✎) för att lägga till punkter.</p>` : "")}`;
-    v.querySelectorAll(".list-item").forEach((el) => el.addEventListener("click", () => selectWaypoint(coerceId(el.getAttribute("data-id")))));
+                : (canEdit ? `<p class="muted" style="margin-top:12px">Slå på redigering (✎) för att lägga till punkter.</p>` : "")}
+      ${lifts.length ? `<p class="list-head" style="margin-top:18px">Liftar (${lifts.length})</p>${liftItems}` : ""}`;
+    v.querySelectorAll("[data-id]").forEach((el) => el.addEventListener("click", () => selectWaypoint(coerceId(el.getAttribute("data-id")))));
+    v.querySelectorAll("[data-lift-id]").forEach((el) => el.addEventListener("click", () => selectLift(el.getAttribute("data-lift-id"))));
     if (editing) $("addNew").addEventListener("click", () => startAdd());
     openPanel();
   }
   function coerceId(s) { const wp = waypoints.find((w) => String(w.id) === s); return wp ? wp.id : s; }
 
   function selectWaypoint(id) {
+    clearLiftHighlight();
     selectedId = id; markers.forEach((m, mid) => m.getElement().classList.toggle("sel", mid === id));
     const wp = waypoints.find((w) => w.id === id); if (!wp) return;
     const m = markers.get(id);

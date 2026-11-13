@@ -147,3 +147,7 @@ body.in-course .fab{display:flex;align-items:center;justify-content:center}
 .link-back{background:none;border:none;color:var(--accent2);cursor:pointer;font-size:13px;
   padding:0;margin:0 0 12px;display:inline-block}
 .link-back:hover{text-decoration:underline}
+
+/* Liftmarkörer + lifttyp i listan */
+.mk.liftmk{background:#2b6cb0;border-color:#dbeafe;color:#fff;width:27px;height:27px;font-size:13px}
+.list-sub{display:block;font-size:11.5px;color:var(--muted);font-weight:500;margin-top:1px}
