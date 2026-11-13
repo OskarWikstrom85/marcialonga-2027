@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Marcialonga 2027 – 3D-karta</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <link href="styles.css" rel="stylesheet" />
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Titelbricka -->
+  <div id="brand">
+    <div class="brand-title">Marcialonga 2027</div>
+    <div class="brand-sub">70 km klassisk stil · Fiemme- &amp; Fassadalen</div>
+  </div>
+
+  <!-- Verktygsrad -->
+  <div id="toolbar">
+    <button id="btnReset" class="tool" title="Återställ vyn">⟲ Vy</button>
+    <button id="btnLogin" class="tool" title="Logga in för att redigera">✎ Redigera</button>
+  </div>
+
+  <!-- Redigeringsbanner -->
+  <div class="editbadge">Redigeringsläge · dra markörer för att flytta · ☰ → “+ Lägg till punkt”</div>
+
+  <!-- Lista med hållpunkter -->
+  <button id="btnList" class="fab" title="Visa hållpunkter">☰</button>
+
+  <!-- Info-/redigeringspanel -->
+  <aside id="panel" class="hidden" aria-hidden="true">
+    <button id="panelClose" class="panel-close" aria-label="Stäng">✕</button>
+    <div id="panelView"></div>
+    <div id="panelEdit" class="hidden"></div>
+  </aside>
+
+  <!-- Statusrad -->
+  <div id="status" class="hidden"></div>
+
+  <!-- Inloggningsdialog -->
+  <div id="loginModal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Logga in för att redigera</h3>
+      <p class="muted">Du får en inloggningslänk via e-post. Besökare behöver inte logga in – de ser kartan direkt.</p>
+      <input id="loginEmail" type="email" placeholder="din@epost.se" autocomplete="email" />
+      <div class="modal-actions">
+        <button id="loginCancel" class="btn-ghost">Avbryt</button>
+        <button id="loginSend" class="btn-primary">Skicka länk</button>
+      </div>
+      <div id="loginMsg" class="muted"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="route.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
