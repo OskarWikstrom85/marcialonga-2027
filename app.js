@@ -36,7 +36,7 @@
   let view = "overview", current = null;
   let editing = false, canEdit = false;
   let waypoints = [], groups = [], usingDefaults = true;
-  const markers = new Map();
+  let editMarker = null;               // enda draggbara HTML-markör (redigering/ny punkt)
   const pills = [];
   const expanded = new Set();          // vilka accordion-sektioner som är öppna
   let selectedId = null, draft = null, addMode = false, newGroupOpen = false, pickIcon = DEFAULT_ICON;
@@ -80,7 +80,7 @@
         map.setTerrain({ source: s.terrainSource, exaggeration: CFG.TERRAIN_EXAGGERATION || 1.4 });
       } catch (e) { console.warn("Terräng:", e); }
       try { map.setSky && map.setSky({ "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 }); } catch (e) {}
-      addLabels(); addRoute(); registerLiftHandlers();
+      addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers();
       enterOverview(true);
     });
     map.on("error", (e) => console.warn("Kartfel:", e && e.error ? e.error.message : e));
@@ -183,7 +183,7 @@
   function enterOverview(initial) {
     view = "overview"; current = null;
     document.body.classList.remove("in-course");
-    removeMask(); removeOverlay(); removeLiftCluster(); clearMarkers(); clearLiftHighlight(); highlightLiftPoint(null); closePanel();
+    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel();
     setRouteVisible(true); addPills();
     if (!initial) resetOverview();
   }
@@ -197,7 +197,7 @@
     setRouteVisible(b.type === "route");
     removeOverlay(); if (b.overlay) addOverlay(b);
     removeLiftCluster(); if (b.hasLifts && window.CANAZEI_LIFTS) { addLiftCluster(); expanded.add("lifts"); }
-    frameCurrent(); showMask(b); renderMarkers();
+    frameCurrent(); showMask(b); addWaypointCluster();
     if (map.getLayer("lift-hl-casing")) map.moveLayer("lift-hl-casing");
     if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
     renderPanel();
@@ -267,10 +267,10 @@
       try {
         const { data, error } = await sb.from("waypoints").select("*").order("sort", { ascending: true });
         if (error) throw error;
-        if (data) { waypoints = data; usingDefaults = false; refreshMarkers(); if (view === "course") refreshPanelIfList(); return; }
+        if (data) { waypoints = data; usingDefaults = false; if (view === "course") updateWps(); if (view === "course") refreshPanelIfList(); return; }
       } catch (e) { console.warn("Läsa punkter:", e); }
     }
-    waypoints = (window.DEFAULT_WAYPOINTS || []).slice(); usingDefaults = true; refreshMarkers();
+    waypoints = (window.DEFAULT_WAYPOINTS || []).slice(); usingDefaults = true; if (view === "course") updateWps();
   }
   function refreshPanelIfList() { const v = $("panelView"); if (!v.classList.contains("hidden") && v.querySelector(".course-head")) renderPanel(); }
 
@@ -295,38 +295,59 @@
   }
 
   // =====================================================================
-  //  Hållpunktsmarkörer (HTML, visar gruppens ikon)
+  //  Hållpunkter – klustrade (röda), + en draggbar markör vid redigering
   // =====================================================================
-  function refreshMarkers() { if (view === "course") renderMarkers(); }
-  function clearMarkers() { markers.forEach((m) => m.remove()); markers.clear(); }
-  function makeEl(wp) {
-    const el = document.createElement("div"); el.className = "mk wpmk"; el.textContent = wpIcon(wp); el.title = wp.title || "";
-    el.addEventListener("click", (ev) => { ev.stopPropagation(); selectWaypoint(wp.id); });
-    return el;
+  function wpFC() {
+    const edId = draft ? draft.id : null;
+    return { type: "FeatureCollection", features: curWaypoints()
+      .filter((w) => w.id !== edId && typeof w.lng === "number" && typeof w.lat === "number")
+      .map((w) => ({ type: "Feature", properties: { id: w.id }, geometry: { type: "Point", coordinates: [w.lng, w.lat] } })) };
   }
-  function renderMarkers() {
-    clearMarkers();
-    curWaypoints().forEach((wp) => {
-      if (typeof wp.lng !== "number" || typeof wp.lat !== "number") return;
-      const m = new maplibregl.Marker({ element: makeEl(wp), anchor: "center", draggable: false }).setLngLat([wp.lng, wp.lat]).addTo(map);
-      m.on("dragend", async () => {
-        const ll = m.getLngLat(), sn = snap(ll.lng, ll.lat); m.setLngLat(sn); wp.lng = sn[0]; wp.lat = sn[1];
-        if (!usingDefaults && sb && !String(wp.id).startsWith("d")) { try { await sb.from("waypoints").update({ lng: wp.lng, lat: wp.lat }).eq("id", wp.id); } catch (e) {} }
-        if (selectedId === wp.id && draft) { draft.lng = wp.lng; draft.lat = wp.lat; if ($("fLng")) { $("fLng").value = wp.lng; $("fLat").value = wp.lat; } }
-        status("Position uppdaterad", "ok", 1500);
-      });
-      markers.set(wp.id, m); m.getElement().classList.toggle("sel", wp.id === selectedId);
+  function addWaypointCluster() {
+    if (map.getSource("wps")) { updateWps(); return; }
+    map.addSource("wps", { type: "geojson", data: wpFC(), cluster: true, clusterRadius: 44, clusterMaxZoom: 14 });
+    const before = map.getLayer("lift-hl-casing") ? "lift-hl-casing" : undefined;
+    map.addLayer({ id: "wp-clusters", type: "circle", source: "wps", filter: ["has", "point_count"],
+      paint: { "circle-color": "#e23b3b", "circle-opacity": 0.92, "circle-stroke-color": "#ffd9d4", "circle-stroke-width": 2,
+        "circle-radius": ["step", ["get", "point_count"], 15, 5, 19, 15, 24, 40, 30] } }, before);
+    map.addLayer({ id: "wp-cluster-count", type: "symbol", source: "wps", filter: ["has", "point_count"],
+      layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": ["Open Sans Bold"], "text-size": 13 }, paint: { "text-color": "#fff" } }, before);
+    map.addLayer({ id: "wp-points", type: "circle", source: "wps", filter: ["!", ["has", "point_count"]],
+      paint: { "circle-color": "#e23b3b", "circle-radius": 7, "circle-stroke-color": "#ffd9d4", "circle-stroke-width": 2 } }, before);
+    map.addLayer({ id: "wp-points-sel", type: "circle", source: "wps", filter: ["==", ["get", "id"], "__none__"],
+      paint: { "circle-color": "#ff6a2b", "circle-radius": 9, "circle-stroke-color": "#fff", "circle-stroke-width": 3 } }, before);
+  }
+  function updateWps() { if (map.getSource("wps")) map.getSource("wps").setData(wpFC()); }
+  function removeWaypointCluster() { ["wp-clusters", "wp-cluster-count", "wp-points", "wp-points-sel"].forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); }); if (map.getSource("wps")) map.removeSource("wps"); }
+  function registerWaypointHandlers() {
+    map.on("click", "wp-clusters", (e) => {
+      const f = map.queryRenderedFeatures(e.point, { layers: ["wp-clusters"] })[0]; if (!f) return;
+      map.getSource("wps").getClusterExpansionZoom(f.properties.cluster_id).then((z) => map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.3 })).catch(() => {});
     });
-    syncDraggable();
+    map.on("click", "wp-points", (e) => { if (e.features && e.features[0]) selectWaypoint(e.features[0].properties.id); });
+    ["wp-clusters", "wp-points"].forEach((id) => { map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer"); map.on("mouseleave", id, () => map.getCanvas().style.cursor = ""); });
   }
-  function syncDraggable() { markers.forEach((m, id) => m.setDraggable(editing && !usingDefaults && !String(id).startsWith("d"))); }
+  function highlightWp(id) { if (map.getLayer("wp-points-sel")) map.setFilter("wp-points-sel", ["==", ["get", "id"], id || "__none__"]); }
+
+  function showEditMarker() {
+    removeEditMarker();
+    const el = document.createElement("div"); el.className = "mk wpmk editmk"; el.textContent = draft ? wpIcon(draft) : "📍";
+    editMarker = new maplibregl.Marker({ element: el, anchor: "center", draggable: true }).setLngLat([draft.lng, draft.lat]).addTo(map);
+    editMarker.on("dragend", async () => {
+      const ll = editMarker.getLngLat(), sn = snap(ll.lng, ll.lat); editMarker.setLngLat(sn);
+      draft.lng = sn[0]; draft.lat = sn[1]; if ($("fLng")) { $("fLng").value = sn[0]; $("fLat").value = sn[1]; }
+      if (!draft.__isNew && sb) { try { await sb.from("waypoints").update({ lng: draft.lng, lat: draft.lat }).eq("id", draft.id); } catch (e) {} }
+      status("Position uppdaterad", "ok", 1500);
+    });
+  }
+  function removeEditMarker() { if (editMarker) { editMarker.remove(); editMarker = null; } }
 
   // =====================================================================
   //  Lift-detalj
   // =====================================================================
   function selectLift(id) {
     const lf = (window.CANAZEI_LIFTS || []).find((l) => l.id === id); if (!lf) return;
-    selectedId = null; markers.forEach((m) => m.getElement().classList.remove("sel")); highlightLiftPoint(id);
+    selectedId = null; highlightWp(null); highlightLiftPoint(id);
     setLiftHighlight(lf.coords);
     if (map.getLayer("lift-hl-casing")) map.moveLayer("lift-hl-casing");
     if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
@@ -368,7 +389,7 @@
   function liftItem(lf) { return `<div class="list-item" data-lift-id="${esc(lf.id)}"><div class="list-ic">🚠</div><div class="list-txt">${esc(lf.name)}<span class="list-sub">${esc(LIFT_TYPE_SV[lf.type] || "Lift")} · ${lf.len >= 1000 ? (lf.len / 1000).toFixed(1).replace(".", ",") + " km" : lf.len + " m"} · ${lf.drop} hm</span></div></div>`; }
 
   function renderPanel() {
-    selectedId = null; markers.forEach((m) => m.getElement().classList.remove("sel")); clearLiftHighlight(); highlightLiftPoint(null);
+    selectedId = null; highlightWp(null); clearLiftHighlight(); highlightLiftPoint(null);
     $("panelEdit").classList.add("hidden");
     const v = $("panelView"); v.classList.remove("hidden");
     const b = current, pts = curWaypoints(), grs = curGroups();
@@ -473,10 +494,9 @@
   // =====================================================================
   function selectWaypoint(id) {
     clearLiftHighlight(); highlightLiftPoint(null);
-    selectedId = id; markers.forEach((m, mid) => m.getElement().classList.toggle("sel", mid === id));
     const wp = waypoints.find((w) => w.id === id); if (!wp) return;
-    const m = markers.get(id);
-    if (m) map.easeTo({ center: m.getLngLat(), duration: 700, offset: [window.innerWidth < 760 ? 0 : -160, 0] });
+    selectedId = id; highlightWp(id);
+    map.easeTo({ center: [wp.lng, wp.lat], duration: 700, offset: [window.innerWidth < 760 ? 0 : -160, 0] });
     if (editing) renderEdit(wp); else renderView(wp);
     openPanel();
   }
@@ -490,13 +510,14 @@
       ${img}
       <span class="wp-badge">${g ? g.icon + " " + esc(g.name) : "📍 Övrigt"}</span>
       <h2 class="wp-title">${esc(wp.title || "Namnlös punkt")}</h2>
-      <div class="wp-body">${esc(wp.body || "")}</div>
+      <div class="wp-body">${linkify(wp.body || "")}</div>
       ${editing ? `<div class="btns"><button class="btn-ghost" id="toEdit">✎ Redigera denna</button></div>` : ""}`;
     $("toList").addEventListener("click", renderPanel);
     if (editing) $("toEdit").addEventListener("click", () => renderEdit(wp));
   }
   function renderEdit(wp) {
     draft = Object.assign({}, wp);
+    updateWps(); showEditMarker();
     $("panelView").classList.add("hidden");
     const e = $("panelEdit"); e.classList.remove("hidden");
     const grs = curGroups();
@@ -521,7 +542,7 @@
     $("fGroup").addEventListener("change", onGroupChange);
     $("fFile").addEventListener("change", onPickImage);
     $("fSave").addEventListener("click", onSave);
-    $("fCancel").addEventListener("click", () => { if (draft && draft.__isNew) removeDraftMarker(); draft = null; renderPanel(); });
+    $("fCancel").addEventListener("click", () => { removeEditMarker(); draft = null; updateWps(); renderPanel(); });
     if (!draft.__isNew) $("fDelete").addEventListener("click", onDelete);
   }
   function onGroupChange() {
@@ -577,7 +598,7 @@
   async function onDelete() {
     if (!sb || !draft) return; if (!window.confirm("Ta bort denna hållpunkt?")) return;
     status("Tar bort…");
-    try { const { error } = await sb.from("waypoints").delete().eq("id", draft.id); if (error) throw error; draft = null; selectedId = null; status("Borttagen", "ok", 1500); await loadWaypoints(); renderPanel(); }
+    try { const { error } = await sb.from("waypoints").delete().eq("id", draft.id); if (error) throw error; removeEditMarker(); draft = null; selectedId = null; status("Borttagen", "ok", 1500); await loadWaypoints(); renderPanel(); }
     catch (e) { console.warn(e); status("Kunde inte ta bort: " + (e.message || e), "err", 5000); }
   }
 
@@ -590,17 +611,15 @@
       const p = snap(e.lngLat.lng, e.lngLat.lat), id = cryptoId();
       const gid = groupId || (curGroups()[0] && curGroups()[0].id) || null;
       draft = { __isNew: true, id, title: "", body: "", lng: p[0], lat: p[1], image_url: null, area_id: current.id, group_id: gid, sort: nextSort() };
-      const m = new maplibregl.Marker({ element: makeEl({ group_id: gid, title: "Ny punkt" }), anchor: "center", draggable: true }).setLngLat(p).addTo(map);
-      m.on("dragend", () => { const ll = m.getLngLat(), sn = snap(ll.lng, ll.lat); m.setLngLat(sn); draft.lng = sn[0]; draft.lat = sn[1]; if ($("fLng")) { $("fLng").value = sn[0]; $("fLat").value = sn[1]; } });
-      markers.set(id, m); selectedId = id; renderEdit(draft); openPanel(); status("");
+      selectedId = id; renderEdit(draft); openPanel(); status("");
     });
   }
-  function removeDraftMarker() { if (draft && draft.__isNew && markers.has(draft.id)) { markers.get(draft.id).remove(); markers.delete(draft.id); } }
+  function removeDraftMarker() { removeEditMarker(); }
 
   // =====================================================================
   //  Redigeringsläge, inloggning, helpers
   // =====================================================================
-  function setEditing(on) { editing = on && canEdit; document.body.classList.toggle("editing", editing); syncDraggable(); if (!editing) { if (draft && draft.__isNew) removeDraftMarker(); draft = null; newGroupOpen = false; } }
+  function setEditing(on) { editing = on && canEdit; document.body.classList.toggle("editing", editing); if (!editing) { removeEditMarker(); draft = null; newGroupOpen = false; updateWps(); } }
   function wireLogin() {
     $("btnLogin").addEventListener("click", () => {
       if (!sb) return status("Koppla Supabase i config.js först.", "err", 4000);
@@ -618,11 +637,12 @@
   function openModal() { $("loginModal").classList.remove("hidden"); $("loginEmail").focus(); }
   function closeModal() { $("loginModal").classList.add("hidden"); $("loginMsg").textContent = ""; }
   function openPanel() { const p = $("panel"); p.classList.remove("hidden"); p.setAttribute("aria-hidden", "false"); }
-  function closePanel() { const p = $("panel"); p.classList.add("hidden"); p.setAttribute("aria-hidden", "true"); selectedId = null; markers.forEach((m) => m.getElement().classList.remove("sel")); }
+  function closePanel() { const p = $("panel"); p.classList.add("hidden"); p.setAttribute("aria-hidden", "true"); selectedId = null; highlightWp(null); highlightLiftPoint(null); }
 
   let statusTimer = null;
   function status(msg, kind, ms) { const el = $("status"); if (!msg) { el.classList.add("hidden"); return; } el.textContent = msg; el.className = kind || ""; el.classList.remove("hidden"); if (statusTimer) clearTimeout(statusTimer); if (ms) statusTimer = setTimeout(() => el.classList.add("hidden"), ms); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  function linkify(s) { return esc(s).replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
   function cryptoId() { return (crypto && crypto.randomUUID) ? crypto.randomUUID() : "x" + Date.now() + Math.random().toString(16).slice(2); }
   function nextSort() { return waypoints.reduce((m, w) => Math.max(m, w.sort || 0), 0) + 1; }
 
