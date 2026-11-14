@@ -158,3 +158,31 @@ body.in-course .fab{display:flex;align-items:center;justify-content:center}
 .ls-ic{font-size:18px}
 .ls-val{font-size:16px;font-weight:800;line-height:1.1}
 .ls-lbl{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* Accordion */
+.acc{border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden;background:var(--panel2)}
+.acc-head{display:flex;align-items:center;gap:9px;padding:11px 12px;cursor:pointer;user-select:none}
+.acc-head:hover{background:rgba(255,255,255,.03)}
+.acc-ic{font-size:17px;width:22px;text-align:center}
+.acc-title{flex:1;font-weight:600;font-size:14px}
+.acc-count{font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:1px 9px;min-width:22px;text-align:center}
+.acc-chev{font-size:12px;color:var(--muted);transition:transform .15s}
+.acc.open>.acc-head .acc-chev{transform:rotate(180deg)}
+.acc-body{padding:0 8px}
+.acc.open>.acc-body{padding:6px 8px 10px}
+.acc-body .acc{background:var(--panel)}
+.acc-mini{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1}
+.acc-mini:hover{border-color:var(--accent)}
+.mini-note{margin:4px 2px}
+.btn-ghost.small,.btn-primary.small{padding:7px 12px;font-size:13px}
+.btn-ghost.small{margin-top:4px}
+
+/* Gruppformulär + ikonväljare */
+.grp-form,.grp-inline{border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;background:var(--panel2)}
+.grp-inline{display:flex;flex-direction:column;gap:8px;margin:8px 0}
+.icon-pick{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.ip{width:34px;height:34px;border:1px solid var(--line);background:var(--panel);border-radius:9px;font-size:17px;cursor:pointer;line-height:1}
+.ip:hover{border-color:var(--accent)}
+.ip.on{border-color:var(--accent);background:var(--accent);box-shadow:0 0 0 2px rgba(255,106,43,.25)}
+
+.mk.wpmk{background:#fff;color:#111}
