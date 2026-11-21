@@ -75,7 +75,6 @@
     const start = CFG.START || { lng: 11.59, lat: 46.38, zoom: 10.3, pitch: 55, bearing: 15 };
     map = new maplibregl.Map({ container: "map", style: s.style, center: [start.lng, start.lat],
       zoom: start.zoom, pitch: start.pitch, bearing: start.bearing, maxPitch: 85, attributionControl: { compact: true } });
-    window.__map = map; // TILLFÄLLIG felsökning
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
@@ -143,7 +142,7 @@
     sommar:      { label: "☀️ Sommar",              short: "☀️", base: "satellite",       sat: SAT_SUMMER, snow: 0,    hillExag: 0.35, hillShadow: "#1b2430", sky: SKY_SUMMER },
     vinter:      { label: "❄️ Vinter (stiliserad)",  short: "❄️", base: "satellite",       sat: SAT_WINTER, snow: 0.26, hillExag: 0.55, hillShadow: "#49607b", sky: SKY_WINTER },
     vinterkarta: { label: "🗺️ Vinterkarta",          short: "🗺️", base: "maptiler-winter",                   snow: 0,    hillExag: 0.30, hillShadow: "#64748b", sky: SKY_WINTER, needs: "MAPTILER_KEY" },
-    vintersat:   { label: "🛰️ Äkta vintersatellit",  short: "🛰️", base: "sentinel-winter",                   snow: 0,    hillExag: 0.45, hillShadow: "#49607b", sky: SKY_WINTER, needs: "SENTINEL_WMS" },
+    vintersat:   { label: "🛰️ Äkta vintersatellit",  short: "🛰️", base: "sentinel-winter",                   snow: 0,    hillExag: 0.12, hillShadow: "#49607b", sky: SKY_WINTER, needs: "SENTINEL_WMS" },
   };
   const MODE_ORDER = ["sommar", "vinter", "vinterkarta", "vintersat"];
   function cfgHas(name) { return !!(CFG[name] && String(CFG[name]).trim()); }
