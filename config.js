@@ -13,7 +13,7 @@ window.APP_CONFIG = {
   //
   // MapTiler-vinterkarta (tecknad vinterstil): lägg in en gratis MapTiler-nyckel.
   // Hämtas på https://cloud.maptiler.com/account/keys/
-  MAPTILER_KEY: "",
+  MAPTILER_KEY: "CTSNwIm79royRVW3drD7",
   //
   // Äkta vintersatellit (Sentinel-2): en WMS-URL-mall med {bbox-epsg-3857}.
   // Skapas via ett gratis Copernicus-konto (Sentinel Hub WMS-instans).
