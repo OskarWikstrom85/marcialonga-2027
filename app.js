@@ -63,6 +63,9 @@
       terrarium: { type: "raster-dem", tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
         encoding: "terrarium", tileSize: 256, maxzoom: 15, attribution: "Höjddata: Mapzen / AWS Terrain Tiles" },
       "route-pos": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+      "pistes": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+      "plan-lines": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+      "plan-nums": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
     };
     const baseLayers = [];
     if (cfgHas("MAPTILER_KEY")) {
@@ -85,6 +88,11 @@
         ...baseLayers,
         { id: "hillshade", type: "hillshade", source: "terrarium", paint: { "hillshade-exaggeration": 0.35, "hillshade-shadow-color": "#1b2430" } },
         { id: "winter-snow", type: "background", paint: { "background-color": "#f5fbff", "background-opacity": 0 } },
+        { id: "pistes-line", type: "line", source: "pistes", layout: { visibility: "none", "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 2.2, "line-opacity": 0.95 } },
+        { id: "pistes-hit", type: "line", source: "pistes", layout: { visibility: "none", "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 18 } },
+        { id: "plan-casing", type: "line", source: "plan-lines", layout: { visibility: "none", "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#0b1a2a", "line-width": 8, "line-opacity": 0.85 } },
+        { id: "plan-line", type: "line", source: "plan-lines", layout: { visibility: "none", "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5 } },
+        { id: "plan-nums", type: "symbol", source: "plan-nums", layout: { visibility: "none", "text-field": ["get", "n"], "text-font": ["Open Sans Bold"], "text-size": 13, "text-allow-overlap": true }, paint: { "text-color": "#fff", "text-halo-color": "#0b1a2a", "text-halo-width": 2.5 } },
         { id: "route-pos-dot", type: "circle", source: "route-pos", layout: { visibility: "none" }, paint: { "circle-radius": 7, "circle-color": "#ff6a2b", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } },
       ],
     };
@@ -105,7 +113,7 @@
         map.setTerrain({ source: s.terrainSource, exaggeration: CFG.TERRAIN_EXAGGERATION || 1.4 });
       } catch (e) { console.warn("Terräng:", e); }
       try { map.setSky && map.setSky({ "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 }); } catch (e) {}
-      addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers();
+      addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers(); registerPisteHandlers();
       applyMode();
       enterOverview(true);
     });
@@ -113,6 +121,8 @@
     $("btnReset").addEventListener("click", () => { if (view === "course") frameCurrent(); else resetOverview(); });
     $("btnProfile").addEventListener("click", toggleProfile);
     $("profClose").addEventListener("click", closeProfile);
+    $("btnPlan").addEventListener("click", togglePlanner);
+    $("planClose").addEventListener("click", closePlanner);
     window.addEventListener("resize", () => { if (profileOpen) renderProfile(); });
     $("btnSeason").addEventListener("click", (e) => { e.stopPropagation(); toggleModeMenu(); });
   }
@@ -266,7 +276,7 @@
       const f = map.queryRenderedFeatures(e.point, { layers: ["lift-clusters"] })[0]; if (!f) return;
       map.getSource("lifts").getClusterExpansionZoom(f.properties.cluster_id).then((z) => map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.3, pitch: 45 })).catch(() => {});
     });
-    map.on("click", "lift-hit", (e) => { if (e.features && e.features[0]) selectLift(e.features[0].properties.id, true); });
+    map.on("click", "lift-hit", (e) => { if (!e.features || !e.features[0]) return; const id = e.features[0].properties.id; if (planAddMode) addStep("lift", id); else selectLift(id, true); });
     ["lift-clusters", "lift-hit"].forEach((id) => {
       map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
       map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
@@ -297,8 +307,9 @@
   function enterOverview(initial) {
     view = "overview"; current = null;
     document.body.classList.remove("in-course");
-    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear(); closeProfile();
+    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear(); closeProfile(); closePlanner();
     if ($("btnProfile")) $("btnProfile").classList.add("hidden");
+    if ($("btnPlan")) $("btnPlan").classList.add("hidden");
     setRouteVisible(true); addPills();
     if (!initial) resetOverview();
   }
@@ -315,8 +326,9 @@
     frameCurrent(); showMask(b); addWaypointCluster();
     if (map.getLayer("lift-hl-casing")) map.moveLayer("lift-hl-casing");
     if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
-    closeProfile(); registerRouteHover();
+    closeProfile(); registerRouteHover(); closePlanner();
     $("btnProfile").classList.toggle("hidden", !hasProfile());
+    $("btnPlan").classList.toggle("hidden", !b.hasLifts);
     renderPanel();
   }
   function exitCourse() { enterOverview(false); }
@@ -571,6 +583,189 @@
     const b = $("btnProfile"); if (b) b.classList.remove("active");
   }
   function toggleProfile() { profileOpen ? closeProfile() : openProfile(); }
+
+  // =====================================================================
+  //  Dagsplanerare – rutt av liftar (↑) och nedfarter (↓) i skidsystemet
+  // =====================================================================
+  const DIFF_COLOR = { novice: "#22c55e", easy: "#3b82f6", intermediate: "#e23b3b", advanced: "#111827", expert: "#111827", freeride: "#f59e0b", unknown: "#8aa0b4" };
+  const DIFF_SV = { novice: "grön", easy: "blå", intermediate: "röd", advanced: "svart", expert: "svart", freeride: "off-pist", unknown: "pist" };
+  const LIFT_SPEED = { cable_car: 8, gondola: 6, "mixed_lift": 5, chair_lift: 2.6, drag_lift: 2, "platter": 2, "t-bar": 2, "j-bar": 2, rope_tow: 1.8, magic_carpet: 1, "zip_line": 6, funicular: 8 };
+  let plans = [], curPlan = null, planOpen = false, planAddMode = false;
+  function pisteById(id) { return (window.CANAZEI_PISTES || []).find((p) => p.id === id); }
+  function liftById2(id) { return (window.CANAZEI_LIFTS || []).find((l) => l.id === id); }
+  function dxy(a, b) { const kx = Math.cos(a[1] * Math.PI / 180); return Math.hypot((a[0] - b[0]) * kx, a[1] - b[1]); }
+  function distM(a, b) { return dxy(a, b) * 111320; }
+  function liftEnds(l) { return [l.coords[0], l.coords[l.coords.length - 1]]; }
+
+  function pistesFC() {
+    return { type: "FeatureCollection", features: (window.CANAZEI_PISTES || []).map((p) => ({ type: "Feature", properties: { id: p.id, color: DIFF_COLOR[p.diff] || "#8aa0b4" }, geometry: { type: "LineString", coordinates: p.geom } })) };
+  }
+  function showPistes(on) {
+    if (on && map.getSource("pistes")) map.getSource("pistes").setData(pistesFC());
+    ["pistes-line", "pistes-hit"].forEach((id) => { if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none"); });
+  }
+
+  // ---- steg-geometri & position ----
+  function stepGeom(s) { if (s.kind === "lift") { const l = liftById2(s.ref); return l ? l.coords : null; } const p = pisteById(s.ref); return p ? p.geom : null; }
+  function stepName(s) { if (s.kind === "lift") { const l = liftById2(s.ref); return l ? l.name : "Lift"; } const p = pisteById(s.ref); return p ? (p.name || "Namnlös nedfart") : "Nedfart"; }
+  function stepEntryExit(s, prevEnd) {
+    if (s.kind === "piste") { const p = pisteById(s.ref); if (!p) return null; return { entry: p.top || p.geom[0], exit: p.bot || p.geom[p.geom.length - 1] }; }
+    const l = liftById2(s.ref); if (!l) return null; const e = liftEnds(l);
+    if (!prevEnd) return { entry: e[0], exit: e[1] };
+    const board = dxy(e[0], prevEnd) <= dxy(e[1], prevEnd) ? e[0] : e[1];
+    const top = board === e[0] ? e[1] : e[0];
+    return { entry: board, exit: top };
+  }
+  function planPositions() {
+    const pos = []; let prev = null;
+    (curPlan ? curPlan.steps : []).forEach((s) => { const ee = stepEntryExit(s, prev); if (ee) { pos.push(ee); prev = ee.exit; } else pos.push(null); });
+    return pos;
+  }
+  function currentPos() { const p = planPositions(); for (let i = p.length - 1; i >= 0; i--) if (p[i]) return p[i].exit; return null; }
+
+  function planSummary() {
+    const steps = curPlan ? curPlan.steps : [];
+    let lifts = 0, pistes = 0, drop = 0, t = 0;
+    steps.forEach((s) => {
+      if (s.kind === "lift") { lifts++; const l = liftById2(s.ref); if (l) t += (l.len || 0) / (LIFT_SPEED[l.type] || 3) + 150; }
+      else { pistes++; const p = pisteById(s.ref); if (p) { if (p.drop != null) drop += p.drop; t += (p.len || 0) / 7 + 20; } }
+    });
+    const mins = Math.round(t / 60);
+    const tStr = mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`;
+    return { lifts, pistes, drop, tStr };
+  }
+
+  // ---- rita planen på kartan ----
+  function renderPlanRoute() {
+    const steps = curPlan ? curPlan.steps : [], pos = planPositions();
+    const lines = { type: "FeatureCollection", features: [] }, nums = { type: "FeatureCollection", features: [] };
+    steps.forEach((s, i) => {
+      const g = stepGeom(s); if (!g) return;
+      const color = s.kind === "lift" ? "#60a5fa" : (DIFF_COLOR[(pisteById(s.ref) || {}).diff] || "#e23b3b");
+      lines.features.push({ type: "Feature", properties: { kind: s.kind, color }, geometry: { type: "LineString", coordinates: g } });
+      if (pos[i]) nums.features.push({ type: "Feature", properties: { n: String(i + 1) }, geometry: { type: "Point", coordinates: pos[i].entry } });
+    });
+    if (map.getSource("plan-lines")) map.getSource("plan-lines").setData(lines);
+    if (map.getSource("plan-nums")) map.getSource("plan-nums").setData(nums);
+    ["plan-casing", "plan-line", "plan-nums"].forEach((id) => { if (map.getLayer(id)) { map.setLayoutProperty(id, "visibility", "visible"); map.moveLayer(id); } });
+  }
+  function clearPlanRoute() {
+    if (map.getSource("plan-lines")) map.getSource("plan-lines").setData({ type: "FeatureCollection", features: [] });
+    if (map.getSource("plan-nums")) map.getSource("plan-nums").setData({ type: "FeatureCollection", features: [] });
+  }
+  function framePlan() {
+    const steps = curPlan ? curPlan.steps : []; if (!steps.length) return;
+    const b = new maplibregl.LngLatBounds();
+    steps.forEach((s) => { const g = stepGeom(s); if (g) g.forEach((c) => b.extend(c)); });
+    if (b.isEmpty()) return;
+    const narrow = window.innerWidth < 760;
+    map.fitBounds(b, { padding: { top: 70, bottom: 70, left: 40, right: narrow ? 40 : 360 }, pitch: 0, duration: 800, maxZoom: 15 });
+  }
+
+  // ---- CRUD ----
+  async function loadPlans() {
+    if (!sb) { plans = []; return; }
+    try { const { data, error } = await sb.from("plans").select("*").eq("area_id", current ? current.id : "canazei").order("sort", { ascending: true }); if (!error && data) plans = data; }
+    catch (e) { console.warn("Läsa planer:", e); }
+  }
+  function newPlan() { curPlan = { id: null, name: "Ny dagsplan", steps: [] }; planAddMode = canEdit; renderPlanner(); clearPlanRoute(); }
+  function selectPlan(id) { const p = plans.find((x) => x.id === id); if (!p) return; curPlan = { id: p.id, name: p.name, steps: Array.isArray(p.steps) ? p.steps.slice() : [] }; planAddMode = false; renderPlanner(); renderPlanRoute(); framePlan(); }
+  function addStep(kind, ref) { if (!curPlan) newPlan(); if (curPlan.steps.some((s) => s.kind === kind && s.ref === ref && s === curPlan.steps[curPlan.steps.length - 1])) return; curPlan.steps.push({ kind, ref }); renderPlanner(); renderPlanRoute(); }
+  function removeStep(i) { curPlan.steps.splice(i, 1); renderPlanner(); renderPlanRoute(); }
+  function moveStep(i, d) { const j = i + d; if (j < 0 || j >= curPlan.steps.length) return; const t = curPlan.steps[i]; curPlan.steps[i] = curPlan.steps[j]; curPlan.steps[j] = t; renderPlanner(); renderPlanRoute(); }
+  function suggestNext() {
+    if (!curPlan) newPlan();
+    const pos = currentPos(), steps = curPlan.steps, lastKind = steps.length ? steps[steps.length - 1].kind : null;
+    const wantKind = lastKind === "lift" ? "piste" : "lift";
+    let best = null, bd = Infinity;
+    if (wantKind === "piste") {
+      (window.CANAZEI_PISTES || []).forEach((p) => { const entry = p.top || p.geom[0]; const d = pos ? dxy(entry, pos) : 0; if (d < bd) { bd = d; best = { kind: "piste", ref: p.id }; } });
+    } else {
+      (window.CANAZEI_LIFTS || []).forEach((l) => { const e = liftEnds(l); const d = pos ? Math.min(dxy(e[0], pos), dxy(e[1], pos)) : 0; if (d < bd) { bd = d; best = { kind: "lift", ref: l.id }; } });
+    }
+    if (best && (!pos || bd * 111320 < 600)) { addStep(best.kind, best.ref); framePlan(); }
+    else status("Hittade ingen tydlig fortsättning – lägg till manuellt.", "warn", 3000);
+  }
+  async function savePlan() {
+    if (!sb) return status("Koppla Supabase först.", "err", 4000);
+    if (!curPlan) return;
+    const name = (($("planNameInp") && $("planNameInp").value) || curPlan.name || "Dagsplan").trim();
+    try {
+      if (curPlan.id) { const { error } = await sb.from("plans").update({ name, steps: curPlan.steps }).eq("id", curPlan.id); if (error) throw error; }
+      else { const sort = plans.reduce((m, p) => Math.max(m, p.sort || 0), 0) + 1; const { data, error } = await sb.from("plans").insert({ area_id: current ? current.id : "canazei", name, steps: curPlan.steps, sort }).select().single(); if (error) throw error; curPlan.id = data.id; }
+      status("Plan sparad", "ok", 1500); await loadPlans(); renderPlanner();
+    } catch (e) { console.warn(e); status("Kunde inte spara planen.", "err", 4000); }
+  }
+  async function deletePlan() {
+    if (!sb || !curPlan || !curPlan.id) { curPlan = null; renderPlanner(); clearPlanRoute(); return; }
+    try { const { error } = await sb.from("plans").delete().eq("id", curPlan.id); if (error) throw error; curPlan = null; status("Plan borttagen", "ok", 1500); await loadPlans(); renderPlanner(); clearPlanRoute(); }
+    catch (e) { status("Kunde inte ta bort.", "err", 4000); }
+  }
+
+  // ---- UI ----
+  function renderPlanner() {
+    const body = $("plannerBody"); if (!body) return;
+    const opts = plans.map((p) => `<option value="${esc(p.id)}" ${curPlan && curPlan.id === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+    const sum = planSummary();
+    let steps = "";
+    if (curPlan && curPlan.steps.length) {
+      steps = curPlan.steps.map((s, i) => {
+        const up = s.kind === "lift";
+        const meta = up ? (() => { const l = liftById2(s.ref); return l ? `↑ lift · +${l.drop || "?"} hm` : "lift"; })()
+          : (() => { const p = pisteById(s.ref); return p ? `↓ ${DIFF_SV[p.diff] || "pist"} · ${p.drop != null ? "−" + p.drop + " hm · " : ""}${(p.len / 1000).toFixed(1)} km` : "nedfart"; })();
+        const col = up ? "#60a5fa" : (DIFF_COLOR[(pisteById(s.ref) || {}).diff] || "#e23b3b");
+        const ctrls = canEdit ? `<div class="step-ctrls"><button data-mv="${i}:-1" ${i === 0 ? "disabled" : ""}>↑</button><button data-mv="${i}:1" ${i === curPlan.steps.length - 1 ? "disabled" : ""}>↓</button><button data-rm="${i}" class="rm">✕</button></div>` : "";
+        return `<div class="step-row"><div class="step-num" style="background:${col}">${i + 1}</div><div class="step-txt"><div class="step-name">${up ? "🚠 " : ""}${esc(stepName(s))}</div><div class="step-meta">${meta}</div></div>${ctrls}</div>`;
+      }).join("");
+    } else steps = `<div class="plan-empty">${canEdit ? "Klicka på liftar och nedfarter på kartan för att bygga dagen." : "Den här planen är tom."}</div>`;
+    const editRow = canEdit ? `<div class="plan-actions">
+        <button id="planAdd" class="btn-primary ${planAddMode ? "on" : ""}">${planAddMode ? "✓ Klickläge på – klicka kartan" : "＋ Lägg till steg"}</button>
+        <button id="planSuggest" class="btn-ghost">✨ Föreslå nästa</button>
+      </div>` : "";
+    const saveRow = canEdit ? `<div class="plan-save"><button id="planSave" class="btn-primary">💾 Spara plan</button><button id="planDelete" class="btn-danger">Ta bort</button></div>` : "";
+    body.innerHTML = `
+      <div class="plan-top">
+        <select id="planSel"><option value="">— Välj plan —</option>${opts}</select>
+        ${canEdit ? `<button id="planNew" class="btn-ghost small">+ Ny</button>` : ""}
+      </div>
+      ${curPlan ? `
+        ${canEdit ? `<input id="planNameInp" class="plan-name" value="${esc(curPlan.name)}" placeholder="Plannamn">` : `<div class="plan-name-view">${esc(curPlan.name)}</div>`}
+        <div class="plan-sum">🚠 ${sum.lifts} · ⬇ ${sum.pistes} · ▼ ${sum.drop} hm · ≈ ${sum.tStr}</div>
+        <div class="plan-steps">${steps}</div>
+        ${editRow}${saveRow}
+      ` : `<div class="plan-empty">Välj en sparad plan${canEdit ? " eller skapa en ny" : ""}.</div>`}`;
+    // wiring
+    if ($("planSel")) $("planSel").addEventListener("change", (e) => { if (e.target.value) selectPlan(e.target.value); });
+    if ($("planNew")) $("planNew").addEventListener("click", newPlan);
+    if ($("planAdd")) $("planAdd").addEventListener("click", () => { planAddMode = !planAddMode; renderPlanner(); status(planAddMode ? "Klicka på liftar/nedfarter på kartan." : "", planAddMode ? "ok" : "", planAddMode ? 2500 : 1); });
+    if ($("planSuggest")) $("planSuggest").addEventListener("click", suggestNext);
+    if ($("planSave")) $("planSave").addEventListener("click", savePlan);
+    if ($("planDelete")) $("planDelete").addEventListener("click", deletePlan);
+    body.querySelectorAll("[data-mv]").forEach((b) => b.addEventListener("click", () => { const [i, d] = b.getAttribute("data-mv").split(":").map(Number); moveStep(i, d); }));
+    body.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", () => removeStep(+b.getAttribute("data-rm"))));
+  }
+  async function openPlanner() {
+    if (!current || !current.hasLifts) return;
+    planOpen = true; closePanel(); peekCloseClear(); closeProfile();
+    showPistes(true);
+    const d = $("planner"); d.classList.remove("hidden"); d.setAttribute("aria-hidden", "false");
+    $("btnPlan").classList.add("active");
+    await loadPlans();
+    if (!curPlan && plans.length) selectPlan(plans[0].id); else renderPlanner();
+    if (curPlan) renderPlanRoute();
+  }
+  function closePlanner() {
+    planOpen = false; planAddMode = false;
+    showPistes(false); clearPlanRoute();
+    const d = $("planner"); if (d) { d.classList.add("hidden"); d.setAttribute("aria-hidden", "true"); }
+    const b = $("btnPlan"); if (b) b.classList.remove("active");
+  }
+  function togglePlanner() { planOpen ? closePlanner() : openPlanner(); }
+  function registerPisteHandlers() {
+    map.on("click", "pistes-hit", (e) => { if (!e.features || !e.features[0]) return; const id = e.features[0].properties.id; if (planAddMode) addStep("piste", id); else showPeek({ kind: "piste", id }); });
+    map.on("mouseenter", "pistes-hit", () => map.getCanvas().style.cursor = "pointer");
+    map.on("mouseleave", "pistes-hit", () => map.getCanvas().style.cursor = "");
+  }
 
   function showEditMarker() {
     removeEditMarker();
@@ -898,6 +1093,9 @@
       const wp = waypoints.find((w) => w.id === t.id); if (!wp) return;
       name = wp.title || "Namnlös punkt"; icon = wpIcon(wp); color = wpColor(wp);
       selectedId = t.id; highlightWp(t.id);
+    } else if (t.kind === "piste") {
+      const p = pisteById(t.id); if (!p) return;
+      name = (p.name || "Namnlös nedfart") + " · " + (DIFF_SV[p.diff] || "pist"); icon = "⬇"; color = DIFF_COLOR[p.diff] || "#8aa0b4";
     } else {
       const lf = (window.CANAZEI_LIFTS || []).find((l) => l.id === t.id); if (!lf) return;
       name = lf.name; icon = "🚠"; color = "#2b6cb0"; highlightLiftPoint(t.id);
