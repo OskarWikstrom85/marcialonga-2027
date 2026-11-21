@@ -6,7 +6,7 @@
   <title>Marcialonga 2027 – 3D-karta</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-  <link href="styles.css?v=15" rel="stylesheet" />
+  <link href="styles.css?v=16" rel="stylesheet" />
 </head>
 <body>
   <div id="map"></div>
@@ -20,8 +20,19 @@
   <!-- Verktygsrad -->
   <div id="toolbar">
     <button id="btnReset" class="tool" title="Återställ vyn">⟲ Vy</button>
+    <button id="btnProfile" class="tool hidden" title="Visa banprofil">📈 Banprofil</button>
     <button id="btnSeason" class="tool" title="Växla till vintervy">❄️ Vinter</button>
     <button id="btnLogin" class="tool" title="Logga in för att redigera">✎ Redigera</button>
+  </div>
+
+  <!-- Höjdprofil (banprofil) -->
+  <div id="profile" class="hidden" aria-hidden="true">
+    <div class="prof-head">
+      <span class="prof-title">Banprofil</span>
+      <span class="prof-sum" id="profSum"></span>
+      <button id="profClose" class="prof-close" aria-label="Stäng">✕</button>
+    </div>
+    <div id="profChart"></div>
   </div>
 
   <!-- Tillbaka till översikt -->
@@ -68,9 +79,10 @@
   <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-  <script src="config.js?v=15"></script>
-  <script src="route.js?v=15"></script>
-  <script src="lifts.js?v=15"></script>
-  <script src="app.js?v=15"></script>
+  <script src="config.js?v=16"></script>
+  <script src="route.js?v=16"></script>
+  <script src="profile.js?v=16"></script>
+  <script src="lifts.js?v=16"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

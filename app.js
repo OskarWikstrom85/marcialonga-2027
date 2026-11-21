@@ -62,6 +62,7 @@
         tileSize: 256, maxzoom: 19, attribution: "Satellit © Esri, Maxar, Earthstar Geographics" },
       terrarium: { type: "raster-dem", tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
         encoding: "terrarium", tileSize: 256, maxzoom: 15, attribution: "Höjddata: Mapzen / AWS Terrain Tiles" },
+      "route-pos": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
     };
     const baseLayers = [];
     if (cfgHas("MAPTILER_KEY")) {
@@ -84,6 +85,7 @@
         ...baseLayers,
         { id: "hillshade", type: "hillshade", source: "terrarium", paint: { "hillshade-exaggeration": 0.35, "hillshade-shadow-color": "#1b2430" } },
         { id: "winter-snow", type: "background", paint: { "background-color": "#f5fbff", "background-opacity": 0 } },
+        { id: "route-pos-dot", type: "circle", source: "route-pos", layout: { visibility: "none" }, paint: { "circle-radius": 7, "circle-color": "#ff6a2b", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } },
       ],
     };
     return { style, terrainSource: "terrarium", terrainTiles: null };
@@ -109,6 +111,9 @@
     });
     map.on("error", (e) => console.warn("Kartfel:", e && e.error ? e.error.message : e));
     $("btnReset").addEventListener("click", () => { if (view === "course") frameCurrent(); else resetOverview(); });
+    $("btnProfile").addEventListener("click", toggleProfile);
+    $("profClose").addEventListener("click", closeProfile);
+    window.addEventListener("resize", () => { if (profileOpen) renderProfile(); });
     $("btnSeason").addEventListener("click", (e) => { e.stopPropagation(); toggleModeMenu(); });
   }
 
@@ -292,7 +297,8 @@
   function enterOverview(initial) {
     view = "overview"; current = null;
     document.body.classList.remove("in-course");
-    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear();
+    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear(); closeProfile();
+    if ($("btnProfile")) $("btnProfile").classList.add("hidden");
     setRouteVisible(true); addPills();
     if (!initial) resetOverview();
   }
@@ -309,6 +315,8 @@
     frameCurrent(); showMask(b); addWaypointCluster();
     if (map.getLayer("lift-hl-casing")) map.moveLayer("lift-hl-casing");
     if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
+    closeProfile(); registerRouteHover();
+    $("btnProfile").classList.toggle("hidden", !hasProfile());
     renderPanel();
   }
   function exitCourse() { enterOverview(false); }
@@ -467,6 +475,102 @@
     if (map.getLayer("wp-points-sel")) map.setFilter("wp-points-sel", f);
     if (map.getLayer("wpa-points-sel")) map.setFilter("wpa-points-sel", f);
   }
+
+  // =====================================================================
+  //  Banprofil (höjdprofil) med kopplad hover karta <-> profil
+  // =====================================================================
+  const PROF = { padL: 42, padR: 14, padT: 14, padB: 26, H: 150, W: 600 };
+  let profileOpen = false, profSvg = null, routeHoverOn = false;
+  function profData() { return window.ROUTE_PROFILE; }
+  function hasProfile() { return current && current.type === "route" && profData(); }
+  function px(d) { const P = profData(); return PROF.padL + (d / P.distKm) * (PROF.W - PROF.padL - PROF.padR); }
+  function pxInv(x) { const P = profData(); return ((x - PROF.padL) / (PROF.W - PROF.padL - PROF.padR)) * P.distKm; }
+  function py(e) { const P = profData(); const span = (P.eleMax - P.eleMin) || 1; return PROF.padT + (1 - (e - P.eleMin) / span) * (PROF.H - PROF.padT - PROF.padB); }
+  function slopeColor(s) { if (s <= -4) return "#38bdf8"; if (s < 2) return "#8aa0b4"; if (s < 5) return "#eab308"; if (s < 8) return "#ff8c3b"; return "#e23b3b"; }
+  function profAt(d) {
+    const p = profData().pts; if (d <= p[0].d) return p[0]; if (d >= p[p.length - 1].d) return p[p.length - 1];
+    let lo = 0, hi = p.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (p[mid].d < d) lo = mid; else hi = mid; }
+    const a = p[lo], b = p[hi], t = (d - a.d) / ((b.d - a.d) || 1);
+    return { d, e: a.e + (b.e - a.e) * t, lng: a.lng + (b.lng - a.lng) * t, lat: a.lat + (b.lat - a.lat) * t };
+  }
+  function nearestD(lng, lat) {
+    const p = profData().pts; let best = 0, bd = Infinity, kx = Math.cos(lat * Math.PI / 180);
+    for (let i = 0; i < p.length; i++) { const dx = (p[i].lng - lng) * kx, dy = p[i].lat - lat, dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = i; } }
+    return p[best].d;
+  }
+  function localSlope(d) { const w = 0.15, P = profData(); const a = profAt(Math.max(0, d - w)), b = profAt(Math.min(P.distKm, d + w)); const dm = (b.d - a.d) * 1000; return dm > 0 ? ((b.e - a.e) / dm) * 100 : 0; }
+  function profWaypoints() {
+    return curWaypoints().filter((w) => typeof w.lng === "number" && typeof w.lat === "number")
+      .map((w) => { const d = nearestD(w.lng, w.lat); return { id: w.id, d, e: profAt(d).e, color: wpColor(w) }; });
+  }
+  function renderProfile() {
+    const P = profData(); if (!P) return;
+    PROF.W = Math.max(320, $("profChart").clientWidth || 600);
+    const pts = P.pts, VW = PROF.W, VH = PROF.H, step = Math.max(1, Math.round(pts.length / 170));
+    let segs = "", prev = pts[0];
+    for (let i = step; i < pts.length; i += step) {
+      const cur = pts[i], dm = (cur.d - prev.d) * 1000, s = dm > 0 ? ((cur.e - prev.e) / dm) * 100 : 0;
+      segs += `<line x1="${px(prev.d).toFixed(1)}" y1="${py(prev.e).toFixed(1)}" x2="${px(cur.d).toFixed(1)}" y2="${py(cur.e).toFixed(1)}" stroke="${slopeColor(s)}" stroke-width="2.6" stroke-linecap="round"/>`;
+      prev = cur;
+    }
+    let area = `M ${px(pts[0].d).toFixed(1)} ${py(pts[0].e).toFixed(1)}`;
+    for (let i = step; i < pts.length; i += step) area += ` L ${px(pts[i].d).toFixed(1)} ${py(pts[i].e).toFixed(1)}`;
+    area += ` L ${px(P.distKm).toFixed(1)} ${(VH - PROF.padB).toFixed(1)} L ${px(0).toFixed(1)} ${(VH - PROF.padB).toFixed(1)} Z`;
+    let grid = "";
+    for (let km = 0; km <= P.distKm; km += 10) { const x = px(km).toFixed(1); grid += `<line x1="${x}" y1="${PROF.padT}" x2="${x}" y2="${VH - PROF.padB}" stroke="#1d2a38" stroke-dasharray="3 4"/><text x="${x}" y="${VH - 9}" text-anchor="middle" class="pf-ax">${km}</text>`; }
+    const yl = `<text x="${PROF.padL - 6}" y="${(py(P.eleMax) + 4).toFixed(1)}" text-anchor="end" class="pf-ax">${P.eleMax}</text><text x="${PROF.padL - 6}" y="${(py(P.eleMin) + 4).toFixed(1)}" text-anchor="end" class="pf-ax">${P.eleMin}</text>`;
+    let wps = "";
+    profWaypoints().forEach((w) => { wps += `<circle class="pf-wp" data-id="${esc(String(w.id))}" cx="${px(w.d).toFixed(1)}" cy="${py(w.e).toFixed(1)}" r="5" fill="${w.color}" stroke="#0f1720" stroke-width="2"/>`; });
+    const cur = `<g id="pfCur" style="display:none"><line id="pfCurL" y1="${PROF.padT}" y2="${VH - PROF.padB}" stroke="#fff" stroke-opacity="0.6" stroke-dasharray="4 4"/><circle id="pfCurDot" r="5" fill="#ff6a2b" stroke="#fff" stroke-width="2"/><rect id="pfTipBg" rx="6" height="22" y="${PROF.padT}" fill="#1b2a3a" stroke="#33465c"/><text id="pfTipT" class="pf-tip"></text></g>`;
+    $("profChart").innerHTML = `<svg id="pfSvg" width="${VW}" height="${VH}" viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg">
+      <line x1="${PROF.padL}" y1="${VH - PROF.padB}" x2="${VW - PROF.padR}" y2="${VH - PROF.padB}" stroke="#2a3a4d"/>
+      ${grid}${yl}<path d="${area}" fill="#ff6a2b" fill-opacity="0.12"/>${segs}${wps}${cur}</svg>`;
+    $("profSum").textContent = `${P.distKm.toFixed(1)} km · +${P.ascent} m · ${P.eleMin}–${P.eleMax} m ö.h.`;
+    profSvg = $("pfSvg");
+    const move = (clientX) => { const r = profSvg.getBoundingClientRect(); const x = (clientX - r.left) * (VW / r.width); setCursor(Math.max(0, Math.min(P.distKm, pxInv(x)))); };
+    profSvg.addEventListener("mousemove", (e) => move(e.clientX));
+    profSvg.addEventListener("mouseleave", clearCursor);
+    profSvg.addEventListener("touchstart", (e) => { if (e.touches[0]) move(e.touches[0].clientX); }, { passive: true });
+    profSvg.addEventListener("touchmove", (e) => { if (e.touches[0]) move(e.touches[0].clientX); }, { passive: true });
+    profSvg.querySelectorAll(".pf-wp").forEach((c) => c.addEventListener("click", (e) => { e.stopPropagation(); selectWaypoint(coerceId(c.getAttribute("data-id")), true); }));
+  }
+  function setCursor(d) {
+    if (d == null) return clearCursor();
+    const pos = profAt(d);
+    if (map.getSource("route-pos")) map.getSource("route-pos").setData({ type: "Feature", geometry: { type: "Point", coordinates: [pos.lng, pos.lat] } });
+    if (map.getLayer("route-pos-dot")) map.setLayoutProperty("route-pos-dot", "visibility", "visible");
+    const g = document.getElementById("pfCur"); if (!g) return;
+    g.style.display = "";
+    const cx = px(d), cy = py(pos.e), slope = localSlope(d);
+    const L = document.getElementById("pfCurL"); L.setAttribute("x1", cx); L.setAttribute("x2", cx);
+    const dot = document.getElementById("pfCurDot"); dot.setAttribute("cx", cx); dot.setAttribute("cy", cy);
+    const label = `km ${d.toFixed(1)} · ${Math.round(pos.e)} m · ${slope >= 0 ? "▲" : "▼"} ${Math.abs(slope).toFixed(0)}%`;
+    const tw = Math.max(96, label.length * 6.4); let tx = cx + 8; if (tx + tw > PROF.W) tx = cx - 8 - tw;
+    const bg = document.getElementById("pfTipBg"); bg.setAttribute("x", tx); bg.setAttribute("width", tw);
+    const t = document.getElementById("pfTipT"); t.textContent = label; t.setAttribute("x", tx + 8); t.setAttribute("y", PROF.padT + 15);
+  }
+  function clearCursor() { const g = document.getElementById("pfCur"); if (g) g.style.display = "none"; if (map.getLayer("route-pos-dot")) map.setLayoutProperty("route-pos-dot", "visibility", "none"); }
+  function registerRouteHover() {
+    if (routeHoverOn) return; routeHoverOn = true;
+    const over = (e) => { if (profileOpen) setCursor(nearestD(e.lngLat.lng, e.lngLat.lat)); };
+    ["route-hit", "route-line"].forEach((id) => { map.on("mousemove", id, over); map.on("mouseleave", id, () => { if (profileOpen) clearCursor(); }); });
+  }
+  function openProfile() {
+    if (!hasProfile()) return;
+    profileOpen = true;
+    if (map.getLayer("route-pos-dot")) map.moveLayer("route-pos-dot");
+    const d = $("profile"); d.classList.remove("hidden"); d.setAttribute("aria-hidden", "false");
+    document.body.classList.add("prof-open");
+    renderProfile();
+    $("btnProfile").classList.add("active");
+  }
+  function closeProfile() {
+    profileOpen = false; clearCursor();
+    const d = $("profile"); if (d) { d.classList.add("hidden"); d.setAttribute("aria-hidden", "true"); }
+    document.body.classList.remove("prof-open");
+    const b = $("btnProfile"); if (b) b.classList.remove("active");
+  }
+  function toggleProfile() { profileOpen ? closeProfile() : openProfile(); }
 
   function showEditMarker() {
     removeEditMarker();
