@@ -152,7 +152,7 @@
   }
   function ensureMapTilerBase() {
     if (map.getLayer("base-maptiler-winter")) return true;
-    if (!cfgHas("MAPTILER_KEY")) return false;
+    if (!cfgHas("MAPTILER_KEY") || !map.isStyleLoaded()) return false;
     const url = `https://api.maptiler.com/maps/winter/256/{z}/{x}/{y}.png?key=${String(CFG.MAPTILER_KEY).trim()}`;
     if (!map.getSource("maptiler-winter")) map.addSource("maptiler-winter", { type: "raster", tiles: [url], tileSize: 256, maxzoom: 22, attribution: "© MapTiler © OpenStreetMap contributors" });
     map.addLayer({ id: "base-maptiler-winter", type: "raster", source: "maptiler-winter", layout: { visibility: "none" } }, "hillshade");
@@ -160,7 +160,7 @@
   }
   function ensureSentinelBase() {
     if (map.getLayer("base-sentinel-winter")) return true;
-    if (!cfgHas("SENTINEL_WMS")) return false;
+    if (!cfgHas("SENTINEL_WMS") || !map.isStyleLoaded()) return false;
     // CFG.SENTINEL_WMS ska vara en WMS-URL-mall med {bbox-epsg-3857}
     if (!map.getSource("sentinel-winter")) map.addSource("sentinel-winter", { type: "raster", tiles: [String(CFG.SENTINEL_WMS).trim()], tileSize: 512, maxzoom: 17, attribution: "Sentinel-2 © Copernicus / ESA" });
     map.addLayer({ id: "base-sentinel-winter", type: "raster", source: "sentinel-winter", layout: { visibility: "none" } }, "hillshade");
@@ -180,6 +180,8 @@
       if (m.base === "maptiler-winter" && ensureMapTilerBase()) baseKey = "maptiler-winter";
       else if (m.base === "sentinel-winter" && ensureSentinelBase()) baseKey = "sentinel-winter";
       setBaseVisible(baseKey);
+      // Om det nya baslagret inte kunde läggas till än (stilen laddar) – försök igen när kartan är redo
+      if (m.base !== "satellite" && baseKey === "satellite" && modeAvailable(mode)) map.once("idle", applyMode);
       if (m.sat && map.getLayer("satellite")) for (const k in m.sat) map.setPaintProperty("satellite", k, m.sat[k]);
       if (map.getLayer("winter-snow")) map.setPaintProperty("winter-snow", "background-opacity", m.snow);
       if (map.getLayer("hillshade")) {
