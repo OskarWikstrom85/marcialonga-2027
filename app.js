@@ -23,7 +23,7 @@
 
   const BANOR = [
     { id: "marcialonga", type: "route", icon: "🎿", name: "Marcialonga",
-      stats: "69,9 km · 798–1449 m ö.h.", mask: { clearKm: 5, rings: [6, 7, 8, 9, 10] } },
+      stats: "68,9 km · +513 m · 798–1441 m ö.h.", mask: { clearKm: 5, rings: [6, 7, 8, 9, 10] } },
     { id: "canazei", type: "ski", icon: "⛷", name: "Canazei – skidområde",
       stats: "Liftar & pister · Sellaronda", pill: { lng: 11.7700, lat: 46.4767 },
       bbox: [11.70, 46.43, 11.95, 46.58], overlay: "https://www.opensnowmap.org/pistes/{z}/{x}/{y}.png",
