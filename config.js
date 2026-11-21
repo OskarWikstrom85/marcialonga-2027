@@ -18,7 +18,7 @@ window.APP_CONFIG = {
   // Äkta vintersatellit (Sentinel-2): en WMS-URL-mall med {bbox-epsg-3857}.
   // Skapas via ett gratis Copernicus-konto (Sentinel Hub WMS-instans).
   // Ex: "https://sh.dataspace.copernicus.eu/ogc/wms/DIN_INSTANS?SERVICE=WMS&REQUEST=GetMap&LAYERS=TRUE-COLOR&FORMAT=image/jpeg&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=512&HEIGHT=512&TIME=2026-02-01/2026-02-28&MAXCC=20"
-  SENTINEL_WMS: "",
+  SENTINEL_WMS: "https://sh.dataspace.copernicus.eu/ogc/wms/0bf49875-3f5d-4d66-a389-2daa974250ca?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=TRUE-COLOR&FORMAT=image/jpeg&SRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=512&HEIGHT=512&TIME=2026-02-01/2026-03-15&MAXCC=40&PRIORITY=leastCC",
 
   // --- Startvy ---
   START: { lng: 11.58, lat: 46.38, zoom: 10.5, pitch: 62, bearing: 20 },
