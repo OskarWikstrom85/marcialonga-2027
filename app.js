@@ -75,6 +75,7 @@
     const start = CFG.START || { lng: 11.59, lat: 46.38, zoom: 10.3, pitch: 55, bearing: 15 };
     map = new maplibregl.Map({ container: "map", style: s.style, center: [start.lng, start.lat],
       zoom: start.zoom, pitch: start.pitch, bearing: start.bearing, maxPitch: 85, attributionControl: { compact: true } });
+    window.__map = map; // TILLFÄLLIG felsökning
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
@@ -153,7 +154,7 @@
   }
   function ensureMapTilerBase() {
     if (map.getLayer("base-maptiler-winter")) return true;
-    if (!cfgHas("MAPTILER_KEY") || !map.isStyleLoaded()) return false;
+    if (!cfgHas("MAPTILER_KEY")) return false;
     const url = `https://api.maptiler.com/maps/winter/256/{z}/{x}/{y}.png?key=${String(CFG.MAPTILER_KEY).trim()}`;
     if (!map.getSource("maptiler-winter")) map.addSource("maptiler-winter", { type: "raster", tiles: [url], tileSize: 256, maxzoom: 22, attribution: "© MapTiler © OpenStreetMap contributors" });
     map.addLayer({ id: "base-maptiler-winter", type: "raster", source: "maptiler-winter", layout: { visibility: "none" } }, "hillshade");
@@ -161,7 +162,7 @@
   }
   function ensureSentinelBase() {
     if (map.getLayer("base-sentinel-winter")) return true;
-    if (!cfgHas("SENTINEL_WMS") || !map.isStyleLoaded()) return false;
+    if (!cfgHas("SENTINEL_WMS")) return false;
     // CFG.SENTINEL_WMS ska vara en WMS-URL-mall med {bbox-epsg-3857}
     if (!map.getSource("sentinel-winter")) map.addSource("sentinel-winter", { type: "raster", tiles: [String(CFG.SENTINEL_WMS).trim()], tileSize: 512, maxzoom: 17, attribution: "Sentinel-2 © Copernicus / ESA" });
     map.addLayer({ id: "base-sentinel-winter", type: "raster", source: "sentinel-winter", layout: { visibility: "none" } }, "hillshade");
