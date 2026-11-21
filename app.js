@@ -75,6 +75,7 @@
     const start = CFG.START || { lng: 11.59, lat: 46.38, zoom: 10.3, pitch: 55, bearing: 15 };
     map = new maplibregl.Map({ container: "map", style: s.style, center: [start.lng, start.lat],
       zoom: start.zoom, pitch: start.pitch, bearing: start.bearing, maxPitch: 85, attributionControl: { compact: true } });
+    window.__map = map; // TILLFÄLLIG felsökning
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
