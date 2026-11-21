@@ -84,7 +84,8 @@
         map.setTerrain({ source: s.terrainSource, exaggeration: CFG.TERRAIN_EXAGGERATION || 1.4 });
       } catch (e) { console.warn("Terräng:", e); }
       try { map.setSky && map.setSky({ "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 }); } catch (e) {}
-      addWinterLayer(); addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers();
+      addWinterLayer(); ensureMapTilerBase(); ensureSentinelBase();
+      addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers();
       applyMode();
       enterOverview(true);
     });
@@ -188,7 +189,7 @@
         map.setPaintProperty("hillshade", "hillshade-exaggeration", m.hillExag);
         map.setPaintProperty("hillshade", "hillshade-shadow-color", m.hillShadow);
       }
-      if (map.setSky) map.setSky(m.sky);
+      try { if (map.setSky) map.setSky(m.sky); } catch (e) {}
     } catch (e) { console.warn("Läge:", e); }
     updateModeBtn();
   }
