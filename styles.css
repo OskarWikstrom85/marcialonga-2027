@@ -186,3 +186,19 @@ body.in-course .fab{display:flex;align-items:center;justify-content:center}
 .ip.on{border-color:var(--accent);background:var(--accent);box-shadow:0 0 0 2px rgba(255,106,43,.25)}
 
 .mk.wpmk{background:#fff;color:#111}
+
+/* Lägesmeny (kartläge: sommar/vinter-varianter) */
+.mode-menu{position:fixed;z-index:30;min-width:220px;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+  padding:6px;display:flex;flex-direction:column;gap:2px}
+.mode-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:transparent;border:0;color:var(--text);font-size:13.5px;font-family:var(--font);
+  padding:9px 10px;border-radius:9px;cursor:pointer}
+.mode-row:hover{background:var(--panel2)}
+.mode-row.cur{background:var(--panel2)}
+.mode-row.off{opacity:.5;cursor:default}
+.mode-row.off:hover{background:transparent}
+.mode-ico{width:20px;text-align:center;flex:0 0 auto}
+.mode-lbl{flex:1 1 auto}
+.mode-chk{color:var(--ok);font-weight:700}
+.mode-note{font-size:11px;color:var(--muted);font-style:italic}

@@ -40,16 +40,18 @@
   const pills = [];
   const expanded = new Set();          // vilka accordion-sektioner som är öppna
   let selectedId = null, draft = null, addMode = false, newGroupOpen = false, pickIcon = DEFAULT_ICON;
-  let season = "summer";
-  try { if (localStorage.getItem("mly-season") === "winter") season = "winter"; } catch (e) {}
+  let mode = "sommar";
+  try {
+    const saved = localStorage.getItem("mly-mode") || localStorage.getItem("mly-season");
+    if (saved === "winter") mode = "vinter";
+    else if (saved === "summer") mode = "sommar";
+    else if (saved) mode = saved;
+  } catch (e) {}
 
   // =====================================================================
   //  Kartstil
   // =====================================================================
   function buildStyle() {
-    const key = (CFG.MAPTILER_KEY || "").trim();
-    if (key) return { style: `https://api.maptiler.com/maps/hybrid/style.json?key=${key}`,
-      terrainSource: "maptiler-terrain", terrainTiles: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${key}` };
     const style = {
       version: 8,
       glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
@@ -83,16 +85,16 @@
       } catch (e) { console.warn("Terräng:", e); }
       try { map.setSky && map.setSky({ "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 }); } catch (e) {}
       addWinterLayer(); addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers();
-      applySeason();
+      applyMode();
       enterOverview(true);
     });
     map.on("error", (e) => console.warn("Kartfel:", e && e.error ? e.error.message : e));
     $("btnReset").addEventListener("click", () => { if (view === "course") frameCurrent(); else resetOverview(); });
-    $("btnSeason").addEventListener("click", toggleSeason);
+    $("btnSeason").addEventListener("click", (e) => { e.stopPropagation(); toggleModeMenu(); });
   }
 
   function addLabels() {
-    if ((CFG.MAPTILER_KEY || "").trim() || map.getSource("esri-ref")) return;
+    if (map.getSource("esri-ref")) return;
     map.addSource("esri-ref", { type: "raster",
       tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"],
       tileSize: 256, maxzoom: 19, attribution: "Ortnamn © Esri" });
@@ -128,47 +130,104 @@
   }
 
   // =====================================================================
-  //  Säsong – sommar/vinter-läge (stiliserad vinter ovanpå satellitbilden)
+  //  Lägen – sommar / stiliserad vinter / MapTiler-vinterkarta / vintersatellit
   // =====================================================================
-  const SEASONS = {
-    summer: {
-      sat: { "raster-saturation": 0, "raster-contrast": 0, "raster-brightness-min": 0, "raster-brightness-max": 1 },
-      snow: 0, hillExag: 0.35, hillShadow: "#1b2430", hillHighlight: "#ffffff",
-      sky: { "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 },
-    },
-    winter: {
-      sat: { "raster-saturation": -0.55, "raster-contrast": -0.07, "raster-brightness-min": 0.12, "raster-brightness-max": 1 },
-      snow: 0.26, hillExag: 0.55, hillShadow: "#49607b", hillHighlight: "#ffffff",
-      sky: { "sky-color": "#cfe4fb", "horizon-color": "#f6faff", "fog-color": "#eef4fb", "sky-horizon-blend": 0.6, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.22 },
-    },
+  const SKY_SUMMER = { "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 };
+  const SKY_WINTER = { "sky-color": "#cfe4fb", "horizon-color": "#f6faff", "fog-color": "#eef4fb", "sky-horizon-blend": 0.6, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.22 };
+  const SAT_SUMMER = { "raster-saturation": 0, "raster-contrast": 0, "raster-brightness-min": 0, "raster-brightness-max": 1 };
+  const SAT_WINTER = { "raster-saturation": -0.55, "raster-contrast": -0.07, "raster-brightness-min": 0.12, "raster-brightness-max": 1 };
+
+  const MODES = {
+    sommar:      { label: "☀️ Sommar",              short: "☀️", base: "satellite",       sat: SAT_SUMMER, snow: 0,    hillExag: 0.35, hillShadow: "#1b2430", sky: SKY_SUMMER },
+    vinter:      { label: "❄️ Vinter (stiliserad)",  short: "❄️", base: "satellite",       sat: SAT_WINTER, snow: 0.26, hillExag: 0.55, hillShadow: "#49607b", sky: SKY_WINTER },
+    vinterkarta: { label: "🗺️ Vinterkarta",          short: "🗺️", base: "maptiler-winter",                   snow: 0,    hillExag: 0.30, hillShadow: "#64748b", sky: SKY_WINTER, needs: "MAPTILER_KEY" },
+    vintersat:   { label: "🛰️ Äkta vintersatellit",  short: "🛰️", base: "sentinel-winter",                   snow: 0,    hillExag: 0.45, hillShadow: "#49607b", sky: SKY_WINTER, needs: "SENTINEL_WMS" },
   };
+  const MODE_ORDER = ["sommar", "vinter", "vinterkarta", "vintersat"];
+  function cfgHas(name) { return !!(CFG[name] && String(CFG[name]).trim()); }
+
   function addWinterLayer() {
     if (!map.getLayer("satellite") || map.getLayer("winter-snow")) return;
     map.addLayer({ id: "winter-snow", type: "background", paint: { "background-color": "#f5fbff", "background-opacity": 0 } });
   }
-  function applySeason() {
-    const p = SEASONS[season] || SEASONS.summer;
+  function ensureMapTilerBase() {
+    if (map.getLayer("base-maptiler-winter")) return true;
+    if (!cfgHas("MAPTILER_KEY")) return false;
+    const url = `https://api.maptiler.com/maps/winter/256/{z}/{x}/{y}.png?key=${String(CFG.MAPTILER_KEY).trim()}`;
+    if (!map.getSource("maptiler-winter")) map.addSource("maptiler-winter", { type: "raster", tiles: [url], tileSize: 256, maxzoom: 22, attribution: "© MapTiler © OpenStreetMap contributors" });
+    map.addLayer({ id: "base-maptiler-winter", type: "raster", source: "maptiler-winter", layout: { visibility: "none" } }, "hillshade");
+    return true;
+  }
+  function ensureSentinelBase() {
+    if (map.getLayer("base-sentinel-winter")) return true;
+    if (!cfgHas("SENTINEL_WMS")) return false;
+    // CFG.SENTINEL_WMS ska vara en WMS-URL-mall med {bbox-epsg-3857}
+    if (!map.getSource("sentinel-winter")) map.addSource("sentinel-winter", { type: "raster", tiles: [String(CFG.SENTINEL_WMS).trim()], tileSize: 512, maxzoom: 17, attribution: "Sentinel-2 © Copernicus / ESA" });
+    map.addLayer({ id: "base-sentinel-winter", type: "raster", source: "sentinel-winter", layout: { visibility: "none" } }, "hillshade");
+    return true;
+  }
+  function setBaseVisible(which) {
+    const all = { satellite: "satellite", "maptiler-winter": "base-maptiler-winter", "sentinel-winter": "base-sentinel-winter" };
+    for (const k in all) { const lid = all[k]; if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", which === k ? "visible" : "none"); }
+  }
+  function modeAvailable(key) { const m = MODES[key]; return m && (!m.needs || cfgHas(m.needs)); }
+
+  function applyMode() {
+    if (!modeAvailable(mode)) mode = "vinter";
+    const m = MODES[mode] || MODES.sommar;
     try {
-      if (map.getLayer("satellite")) for (const k in p.sat) map.setPaintProperty("satellite", k, p.sat[k]);
-      if (map.getLayer("winter-snow")) map.setPaintProperty("winter-snow", "background-opacity", p.snow);
+      let baseKey = "satellite";
+      if (m.base === "maptiler-winter" && ensureMapTilerBase()) baseKey = "maptiler-winter";
+      else if (m.base === "sentinel-winter" && ensureSentinelBase()) baseKey = "sentinel-winter";
+      setBaseVisible(baseKey);
+      if (m.sat && map.getLayer("satellite")) for (const k in m.sat) map.setPaintProperty("satellite", k, m.sat[k]);
+      if (map.getLayer("winter-snow")) map.setPaintProperty("winter-snow", "background-opacity", m.snow);
       if (map.getLayer("hillshade")) {
-        map.setPaintProperty("hillshade", "hillshade-exaggeration", p.hillExag);
-        map.setPaintProperty("hillshade", "hillshade-shadow-color", p.hillShadow);
-        map.setPaintProperty("hillshade", "hillshade-highlight-color", p.hillHighlight);
+        map.setPaintProperty("hillshade", "hillshade-exaggeration", m.hillExag);
+        map.setPaintProperty("hillshade", "hillshade-shadow-color", m.hillShadow);
       }
-      if (map.setSky) map.setSky(p.sky);
-    } catch (e) { console.warn("Säsong:", e); }
-    updateSeasonBtn();
+      if (map.setSky) map.setSky(m.sky);
+    } catch (e) { console.warn("Läge:", e); }
+    updateModeBtn();
   }
-  function updateSeasonBtn() {
+  function setMode(key) {
+    if (!modeAvailable(key)) return;
+    mode = key;
+    try { localStorage.setItem("mly-mode", mode); } catch (e) {}
+    applyMode();
+    closeModeMenu();
+  }
+  function updateModeBtn() {
     const b = $("btnSeason"); if (!b) return;
-    if (season === "winter") { b.textContent = "☀️ Sommar"; b.title = "Växla till sommarvy"; b.classList.add("active"); }
-    else { b.textContent = "❄️ Vinter"; b.title = "Växla till vintervy"; b.classList.remove("active"); }
+    const m = MODES[mode] || MODES.sommar;
+    b.textContent = m.label;
+    b.title = "Byt kartläge";
+    b.classList.toggle("active", mode !== "sommar");
   }
-  function toggleSeason() {
-    season = season === "winter" ? "summer" : "winter";
-    try { localStorage.setItem("mly-season", season); } catch (e) {}
-    applySeason();
+  let modeMenuEl = null;
+  function closeModeMenu() { if (modeMenuEl) { modeMenuEl.remove(); modeMenuEl = null; document.removeEventListener("click", onDocClickMode, true); } }
+  function onDocClickMode(e) { if (modeMenuEl && !modeMenuEl.contains(e.target) && e.target !== $("btnSeason")) closeModeMenu(); }
+  function toggleModeMenu() {
+    if (modeMenuEl) { closeModeMenu(); return; }
+    const btn = $("btnSeason"); if (!btn) return;
+    const menu = document.createElement("div");
+    menu.className = "mode-menu";
+    MODE_ORDER.forEach((key) => {
+      const m = MODES[key];
+      const row = document.createElement("button");
+      const avail = modeAvailable(key);
+      row.className = "mode-row" + (key === mode ? " cur" : "") + (avail ? "" : " off");
+      row.innerHTML = `<span class="mode-ico">${m.short}</span><span class="mode-lbl">${m.label.replace(/^\S+\s/, "")}</span>` + (avail ? (key === mode ? `<span class="mode-chk">✓</span>` : "") : `<span class="mode-note">lägg till nyckel</span>`);
+      if (avail) row.addEventListener("click", (e) => { e.stopPropagation(); setMode(key); });
+      else row.disabled = true;
+      menu.appendChild(row);
+    });
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.top = (r.bottom + 8) + "px";
+    menu.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+    modeMenuEl = menu;
+    setTimeout(() => document.addEventListener("click", onDocClickMode, true), 0);
   }
 
   // =====================================================================

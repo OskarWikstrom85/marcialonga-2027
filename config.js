@@ -8,10 +8,17 @@ window.APP_CONFIG = {
   SUPABASE_URL: "https://xunkuomfkgjrnkawuqwf.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_DJ4IBXXHTkIamxDc17ZkJw_xWm22hrF",
 
-  // --- MapTiler (VALFRITT) ---
-  // Lämna tomt så används gratis, nyckelfria kartlager (satellit + terräng).
-  // Lägg in en gratis MapTiler-nyckel för snyggare karta med ortnamn.
+  // --- Vinterlägen (VALFRITT) ---
+  // Baskartan är alltid gratis satellit + terräng. Nedan tänder extra vinterlägen.
+  //
+  // MapTiler-vinterkarta (tecknad vinterstil): lägg in en gratis MapTiler-nyckel.
+  // Hämtas på https://cloud.maptiler.com/account/keys/
   MAPTILER_KEY: "",
+  //
+  // Äkta vintersatellit (Sentinel-2): en WMS-URL-mall med {bbox-epsg-3857}.
+  // Skapas via ett gratis Copernicus-konto (Sentinel Hub WMS-instans).
+  // Ex: "https://sh.dataspace.copernicus.eu/ogc/wms/DIN_INSTANS?SERVICE=WMS&REQUEST=GetMap&LAYERS=TRUE-COLOR&FORMAT=image/jpeg&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=512&HEIGHT=512&TIME=2026-02-01/2026-02-28&MAXCC=20"
+  SENTINEL_WMS: "",
 
   // --- Startvy ---
   START: { lng: 11.58, lat: 46.38, zoom: 10.5, pitch: 62, bearing: 20 },
