@@ -17,6 +17,8 @@
   const LIFT_TYPE_ORDER = ["cable_car", "gondola", "chair_lift", "mixed_lift", "t-bar", "j-bar", "platter", "drag_lift", "rope_tow", "magic_carpet"];
   const ICON_PALETTE = ["ℹ️","🍽","☕","🍺","🍷","📷","🏨","🅿️","🚠","🎿","⛰","🏔","⚠️","🚻","🎯","⭐","❤️","🏁","🚩","💧","🥐","🧀","🛒","🎪"];
   const DEFAULT_ICON = "📍";
+  const COLOR_PALETTE = ["#e23b3b","#f59e0b","#eab308","#22c55e","#14b8a6","#2b6cb0","#6366f1","#a855f7","#ec4899","#64748b"];
+  const DEFAULT_COLOR = "#e23b3b";
   const BUCKET = "waypoint-images";
 
   const BANOR = [
@@ -39,7 +41,8 @@
   let editMarker = null;               // enda draggbara HTML-markör (redigering/ny punkt)
   const pills = [];
   const expanded = new Set();          // vilka accordion-sektioner som är öppna
-  let selectedId = null, draft = null, addMode = false, newGroupOpen = false, pickIcon = DEFAULT_ICON;
+  let selectedId = null, draft = null, addMode = false, newGroupOpen = false, pickIcon = DEFAULT_ICON, pickColor = DEFAULT_COLOR, pickAlways = false;
+  let peekTarget = null;               // { kind:"wp"|"lift", id } – vald punkt visad som kompakt rad
   let mode = "sommar";
   try {
     const saved = localStorage.getItem("mly-mode") || localStorage.getItem("mly-season");
@@ -246,9 +249,11 @@
       paint: { "circle-color": "#2b6cb0", "circle-radius": 7, "circle-stroke-color": "#dbeafe", "circle-stroke-width": 2 } }, before);
     map.addLayer({ id: "lift-points-sel", type: "circle", source: "lifts", filter: ["==", ["get", "id"], "__none__"],
       paint: { "circle-color": "#ff6a2b", "circle-radius": 9, "circle-stroke-color": "#fff", "circle-stroke-width": 3 } }, before);
+    map.addLayer({ id: "lift-hit", type: "circle", source: "lifts", filter: ["!", ["has", "point_count"]],
+      paint: { "circle-color": "#000", "circle-opacity": 0.01, "circle-radius": 20 } }, before);
   }
   function removeLiftCluster() {
-    ["lift-clusters", "lift-cluster-count", "lift-points", "lift-points-sel"].forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); });
+    ["lift-clusters", "lift-cluster-count", "lift-points", "lift-points-sel", "lift-hit"].forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); });
     if (map.getSource("lifts")) map.removeSource("lifts");
   }
   function registerLiftHandlers() {
@@ -256,8 +261,8 @@
       const f = map.queryRenderedFeatures(e.point, { layers: ["lift-clusters"] })[0]; if (!f) return;
       map.getSource("lifts").getClusterExpansionZoom(f.properties.cluster_id).then((z) => map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.3, pitch: 45 })).catch(() => {});
     });
-    map.on("click", "lift-points", (e) => { if (e.features && e.features[0]) selectLift(e.features[0].properties.id); });
-    ["lift-clusters", "lift-points"].forEach((id) => {
+    map.on("click", "lift-hit", (e) => { if (e.features && e.features[0]) selectLift(e.features[0].properties.id, true); });
+    ["lift-clusters", "lift-hit"].forEach((id) => {
       map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
       map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
     });
@@ -287,7 +292,7 @@
   function enterOverview(initial) {
     view = "overview"; current = null;
     document.body.classList.remove("in-course");
-    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel();
+    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear();
     setRouteVisible(true); addPills();
     if (!initial) resetOverview();
   }
@@ -363,7 +368,7 @@
   }
   async function loadGroups() {
     if (!sb) { groups = []; return; }
-    try { const { data, error } = await sb.from("groups").select("*").order("sort", { ascending: true }); if (!error && data) { groups = data; if (view === "course") refreshPanelIfList(); } }
+    try { const { data, error } = await sb.from("groups").select("*").order("sort", { ascending: true }); if (!error && data) { groups = data; if (view === "course") { updateWps(); refreshPanelIfList(); } } }
     catch (e) { console.warn("Läsa grupper:", e); }
   }
   async function loadWaypoints() {
@@ -382,6 +387,8 @@
   function curGroups() { const id = current ? current.id : null; return groups.filter((g) => (g.area_id || "marcialonga") === id).sort((a, b) => (a.sort || 0) - (b.sort || 0)); }
   function groupById(id) { return groups.find((g) => g.id === id); }
   function wpIcon(wp) { const g = groupById(wp.group_id); return g ? g.icon : DEFAULT_ICON; }
+  function wpColor(wp) { const g = groupById(wp.group_id); return (g && g.color) ? g.color : DEFAULT_COLOR; }
+  function wpAlways(wp) { const g = groupById(wp.group_id); return !!(g && g.always_visible); }
 
   // =====================================================================
   //  Snäppning
@@ -401,37 +408,65 @@
   // =====================================================================
   //  Hållpunkter – klustrade (röda), + en draggbar markör vid redigering
   // =====================================================================
-  function wpFC() {
+  function wpFeat(w) { return { type: "Feature", properties: { id: w.id, color: wpColor(w) }, geometry: { type: "Point", coordinates: [w.lng, w.lat] } }; }
+  function wpParts() {
     const edId = draft ? draft.id : null;
-    return { type: "FeatureCollection", features: curWaypoints()
-      .filter((w) => w.id !== edId && typeof w.lng === "number" && typeof w.lat === "number")
-      .map((w) => ({ type: "Feature", properties: { id: w.id }, geometry: { type: "Point", coordinates: [w.lng, w.lat] } })) };
+    const all = curWaypoints().filter((w) => w.id !== edId && typeof w.lng === "number" && typeof w.lat === "number");
+    return {
+      clustered: { type: "FeatureCollection", features: all.filter((w) => !wpAlways(w)).map(wpFeat) },
+      always: { type: "FeatureCollection", features: all.filter((w) => wpAlways(w)).map(wpFeat) },
+    };
   }
   function addWaypointCluster() {
     if (map.getSource("wps")) { updateWps(); return; }
-    map.addSource("wps", { type: "geojson", data: wpFC(), cluster: true, clusterRadius: 44, clusterMaxZoom: 14 });
+    const parts = wpParts();
     const before = map.getLayer("lift-hl-casing") ? "lift-hl-casing" : undefined;
+    // --- Klustrade hållpunkter (ej alltid-synliga grupper) ---
+    map.addSource("wps", { type: "geojson", data: parts.clustered, cluster: true, clusterRadius: 44, clusterMaxZoom: 14 });
     map.addLayer({ id: "wp-clusters", type: "circle", source: "wps", filter: ["has", "point_count"],
-      paint: { "circle-color": "#e23b3b", "circle-opacity": 0.92, "circle-stroke-color": "#ffd9d4", "circle-stroke-width": 2,
-        "circle-radius": ["step", ["get", "point_count"], 15, 5, 19, 15, 24, 40, 30] } }, before);
+      paint: { "circle-color": "#334155", "circle-opacity": 0.92, "circle-stroke-color": "#e5edf7", "circle-stroke-width": 2,
+        "circle-radius": ["step", ["get", "point_count"], 17, 5, 21, 15, 26, 40, 32] } }, before);
     map.addLayer({ id: "wp-cluster-count", type: "symbol", source: "wps", filter: ["has", "point_count"],
       layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": ["Open Sans Bold"], "text-size": 13 }, paint: { "text-color": "#fff" } }, before);
     map.addLayer({ id: "wp-points", type: "circle", source: "wps", filter: ["!", ["has", "point_count"]],
-      paint: { "circle-color": "#e23b3b", "circle-radius": 7, "circle-stroke-color": "#ffd9d4", "circle-stroke-width": 2 } }, before);
+      paint: { "circle-color": ["get", "color"], "circle-radius": 8, "circle-stroke-color": "#fff", "circle-stroke-width": 2 } }, before);
     map.addLayer({ id: "wp-points-sel", type: "circle", source: "wps", filter: ["==", ["get", "id"], "__none__"],
-      paint: { "circle-color": "#ff6a2b", "circle-radius": 9, "circle-stroke-color": "#fff", "circle-stroke-width": 3 } }, before);
+      paint: { "circle-color": "#ff6a2b", "circle-radius": 10, "circle-stroke-color": "#fff", "circle-stroke-width": 3 } }, before);
+    // Större, nästan osynlig klickyta för enskilda punkter
+    map.addLayer({ id: "wp-hit", type: "circle", source: "wps", filter: ["!", ["has", "point_count"]],
+      paint: { "circle-color": "#000", "circle-opacity": 0.01, "circle-radius": 20 } }, before);
+    // --- Alltid synliga hållpunkter (t.ex. boenden), oklustrat ---
+    map.addSource("wps-always", { type: "geojson", data: parts.always });
+    map.addLayer({ id: "wpa-points", type: "circle", source: "wps-always",
+      paint: { "circle-color": ["get", "color"], "circle-radius": 9, "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } }, before);
+    map.addLayer({ id: "wpa-points-sel", type: "circle", source: "wps-always", filter: ["==", ["get", "id"], "__none__"],
+      paint: { "circle-color": "#ff6a2b", "circle-radius": 11, "circle-stroke-color": "#fff", "circle-stroke-width": 3 } }, before);
+    map.addLayer({ id: "wpa-hit", type: "circle", source: "wps-always",
+      paint: { "circle-color": "#000", "circle-opacity": 0.01, "circle-radius": 20 } }, before);
   }
-  function updateWps() { if (map.getSource("wps")) map.getSource("wps").setData(wpFC()); }
-  function removeWaypointCluster() { ["wp-clusters", "wp-cluster-count", "wp-points", "wp-points-sel"].forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); }); if (map.getSource("wps")) map.removeSource("wps"); }
+  function updateWps() {
+    const parts = wpParts();
+    if (map.getSource("wps")) map.getSource("wps").setData(parts.clustered);
+    if (map.getSource("wps-always")) map.getSource("wps-always").setData(parts.always);
+  }
+  function removeWaypointCluster() {
+    ["wp-clusters", "wp-cluster-count", "wp-points", "wp-points-sel", "wp-hit", "wpa-points", "wpa-points-sel", "wpa-hit"].forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); });
+    ["wps", "wps-always"].forEach((s) => { if (map.getSource(s)) map.removeSource(s); });
+  }
   function registerWaypointHandlers() {
     map.on("click", "wp-clusters", (e) => {
       const f = map.queryRenderedFeatures(e.point, { layers: ["wp-clusters"] })[0]; if (!f) return;
       map.getSource("wps").getClusterExpansionZoom(f.properties.cluster_id).then((z) => map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.3 })).catch(() => {});
     });
-    map.on("click", "wp-points", (e) => { if (e.features && e.features[0]) selectWaypoint(e.features[0].properties.id); });
-    ["wp-clusters", "wp-points"].forEach((id) => { map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer"); map.on("mouseleave", id, () => map.getCanvas().style.cursor = ""); });
+    map.on("click", "wp-hit", (e) => { if (e.features && e.features[0]) selectWaypoint(e.features[0].properties.id, true); });
+    map.on("click", "wpa-hit", (e) => { if (e.features && e.features[0]) selectWaypoint(e.features[0].properties.id, true); });
+    ["wp-clusters", "wp-hit", "wpa-hit"].forEach((id) => { map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer"); map.on("mouseleave", id, () => map.getCanvas().style.cursor = ""); });
   }
-  function highlightWp(id) { if (map.getLayer("wp-points-sel")) map.setFilter("wp-points-sel", ["==", ["get", "id"], id || "__none__"]); }
+  function highlightWp(id) {
+    const f = ["==", ["get", "id"], id || "__none__"];
+    if (map.getLayer("wp-points-sel")) map.setFilter("wp-points-sel", f);
+    if (map.getLayer("wpa-points-sel")) map.setFilter("wpa-points-sel", f);
+  }
 
   function showEditMarker() {
     removeEditMarker();
@@ -449,7 +484,7 @@
   // =====================================================================
   //  Lift-detalj
   // =====================================================================
-  function selectLift(id) {
+  function selectLift(id, fromMap) {
     const lf = (window.CANAZEI_LIFTS || []).find((l) => l.id === id); if (!lf) return;
     selectedId = null; highlightWp(null); highlightLiftPoint(id);
     setLiftHighlight(lf.coords);
@@ -458,7 +493,8 @@
     const bnds = new maplibregl.LngLatBounds(); lf.coords.forEach((c) => bnds.extend(c));
     const narrow = window.innerWidth < 760;
     map.fitBounds(bnds, { padding: { top: 80, bottom: 80, left: 40, right: narrow ? 40 : 340 }, pitch: 0, bearing: 0, duration: 900, maxZoom: 15.5 });
-    renderLiftView(lf); openPanel();
+    if (fromMap) showPeek({ kind: "lift", id });
+    else { renderLiftView(lf); openPanel(); }
   }
   function renderLiftView(lf) {
     $("panelEdit").classList.add("hidden");
@@ -489,7 +525,7 @@
       </div>
       <div class="acc-body">${open ? bodyHtml : ""}</div></div>`;
   }
-  function wpItem(wp) { return `<div class="list-item" data-id="${esc(String(wp.id))}"><div class="list-ic">${wpIcon(wp)}</div><div class="list-txt">${esc(wp.title || "Namnlös")}</div></div>`; }
+  function wpItem(wp) { return `<div class="list-item" data-id="${esc(String(wp.id))}"><div class="list-ic" style="box-shadow:inset 0 0 0 2px ${wpColor(wp)}">${wpIcon(wp)}</div><div class="list-txt">${esc(wp.title || "Namnlös")}</div></div>`; }
   function liftItem(lf) { return `<div class="list-item" data-lift-id="${esc(lf.id)}"><div class="list-ic">🚠</div><div class="list-txt">${esc(lf.name)}<span class="list-sub">${esc(LIFT_TYPE_SV[lf.type] || "Lift")} · ${lf.len >= 1000 ? (lf.len / 1000).toFixed(1).replace(".", ",") + " km" : lf.len + " m"} · ${lf.drop} hm</span></div></div>`; }
 
   function renderPanel() {
@@ -534,18 +570,22 @@
     v.querySelectorAll("[data-lift-id]").forEach((el) => el.addEventListener("click", () => selectLift(el.getAttribute("data-lift-id"))));
     v.querySelectorAll("[data-addgrp]").forEach((el) => el.addEventListener("click", (ev) => { ev.stopPropagation(); startAdd(el.getAttribute("data-addgrp")); }));
     v.querySelectorAll("[data-editgrp]").forEach((el) => el.addEventListener("click", (ev) => { ev.stopPropagation(); editGroup(el.getAttribute("data-editgrp")); }));
-    if ($("newGrpBtn")) $("newGrpBtn").addEventListener("click", () => { newGroupOpen = true; pickIcon = DEFAULT_ICON; renderPanel(); });
+    if ($("newGrpBtn")) $("newGrpBtn").addEventListener("click", () => { newGroupOpen = true; pickIcon = DEFAULT_ICON; pickColor = DEFAULT_COLOR; pickAlways = false; renderPanel(); });
     wireNewGroupForm();
     openPanel();
   }
 
   // ---- Ny/ändra grupp ----
   function iconPickerHtml(sel) { return `<div class="icon-pick">${ICON_PALETTE.map((e) => `<button type="button" class="ip ${e === sel ? "on" : ""}" data-ic="${e}">${e}</button>`).join("")}</div>`; }
+  function colorPickerHtml(sel) { return `<div class="color-pick">${COLOR_PALETTE.map((c) => `<button type="button" class="cp ${c === sel ? "on" : ""}" data-col="${c}" style="background:${c}" aria-label="Färg ${c}"></button>`).join("")}</div>`; }
   function newGroupForm(g) {
     const name = g ? esc(g.name) : "", ic = g ? g.icon : pickIcon;
+    const col = g ? (g.color || DEFAULT_COLOR) : pickColor, always = g ? !!g.always_visible : pickAlways;
     return `<div class="grp-form">
       <label>Gruppnamn</label><input id="grpName" type="text" value="${name}" placeholder="t.ex. Vätskekontroll">
       <label>Ikon</label>${iconPickerHtml(ic)}
+      <label>Färg</label>${colorPickerHtml(col)}
+      <label class="chk"><input type="checkbox" id="grpAlways" ${always ? "checked" : ""}> Visa alltid på kartan (även utzoomat)</label>
       <div class="btns">
         <button class="btn-primary" id="grpSave">${g ? "Spara" : "Skapa grupp"}</button>
         <button class="btn-ghost" id="grpCancel">Avbryt</button>
@@ -555,6 +595,7 @@
   function wireNewGroupForm() {
     const form = $("panelView").querySelector(".grp-form"); if (!form) return;
     form.querySelectorAll(".ip").forEach((b) => b.addEventListener("click", () => { pickIcon = b.getAttribute("data-ic"); form.querySelectorAll(".ip").forEach((x) => x.classList.toggle("on", x === b)); }));
+    form.querySelectorAll(".cp").forEach((b) => b.addEventListener("click", () => { pickColor = b.getAttribute("data-col"); form.querySelectorAll(".cp").forEach((x) => x.classList.toggle("on", x === b)); }));
     const editId = form.getAttribute("data-edit");
     $("grpSave").addEventListener("click", () => saveGroup(editId));
     $("grpCancel").addEventListener("click", () => { newGroupOpen = false; renderPanel(); });
@@ -562,7 +603,7 @@
   }
   function editGroup(id) {
     const g = groupById(id); if (!g) return;
-    pickIcon = g.icon; newGroupOpen = false;
+    pickIcon = g.icon; pickColor = g.color || DEFAULT_COLOR; pickAlways = !!g.always_visible; newGroupOpen = false;
     const v = $("panelView"); // ersätt gruppens body-area med formulär
     renderPanel();
     // injicera redigeringsformulär överst
@@ -576,9 +617,10 @@
     if (!sb) return status("Koppla Supabase för att spara grupper.", "err", 4000);
     const name = ($("grpName").value || "").trim(); if (!name) return status("Gruppnamn krävs.", "err", 3000);
     try {
-      if (editId) { await sb.from("groups").update({ name, icon: pickIcon }).eq("id", editId); }
-      else { const sort = curGroups().reduce((m, g) => Math.max(m, g.sort || 0), 0) + 1; await sb.from("groups").insert({ area_id: current.id, name, icon: pickIcon, sort }); }
-      newGroupOpen = false; status("Grupp sparad", "ok", 1500); await loadGroups(); renderPanel();
+      const always = $("grpAlways") ? $("grpAlways").checked : false;
+      if (editId) { await sb.from("groups").update({ name, icon: pickIcon, color: pickColor, always_visible: always }).eq("id", editId); }
+      else { const sort = curGroups().reduce((m, g) => Math.max(m, g.sort || 0), 0) + 1; await sb.from("groups").insert({ area_id: current.id, name, icon: pickIcon, color: pickColor, always_visible: always, sort }); }
+      newGroupOpen = false; status("Grupp sparad", "ok", 1500); await loadGroups(); updateWps(); renderPanel();
     } catch (e) { console.warn(e); status("Kunde inte spara grupp: " + (e.message || e), "err", 5000); }
   }
   async function deleteGroup(id) {
@@ -596,13 +638,14 @@
   // =====================================================================
   //  Hållpunkt – visa/redigera
   // =====================================================================
-  function selectWaypoint(id) {
+  function selectWaypoint(id, fromMap) {
     clearLiftHighlight(); highlightLiftPoint(null);
     const wp = waypoints.find((w) => w.id === id); if (!wp) return;
     selectedId = id; highlightWp(id);
     map.easeTo({ center: [wp.lng, wp.lat], duration: 700, offset: [window.innerWidth < 760 ? 0 : -160, 0] });
-    if (editing) renderEdit(wp); else renderView(wp);
-    openPanel();
+    if (editing) { renderEdit(wp); openPanel(); return; }
+    if (fromMap) showPeek({ kind: "wp", id });       // klick på kartan → kompakt rad
+    else { renderView(wp); openPanel(); }            // klick i listan → full detalj
   }
   function renderView(wp) {
     $("panelEdit").classList.add("hidden");
@@ -663,7 +706,7 @@
     const name = ($("niName").value || "").trim(); if (!name) return status("Gruppnamn krävs.", "err", 3000);
     try {
       const sort = curGroups().reduce((m, g) => Math.max(m, g.sort || 0), 0) + 1;
-      const { data, error } = await sb.from("groups").insert({ area_id: current.id, name, icon: pickIcon, sort }).select().single();
+      const { data, error } = await sb.from("groups").insert({ area_id: current.id, name, icon: pickIcon, color: DEFAULT_COLOR, always_visible: false, sort }).select().single();
       if (error) throw error;
       await loadGroups(); draft.group_id = data.id;
       const sel = $("fGroup"); sel.innerHTML = curGroups().map((g) => `<option value="${esc(g.id)}" ${draft.group_id === g.id ? "selected" : ""}>${g.icon} ${esc(g.name)}</option>`).join("") + `<option value="__new__">➕ Ny grupp…</option>`;
@@ -740,8 +783,34 @@
   }
   function openModal() { $("loginModal").classList.remove("hidden"); $("loginEmail").focus(); }
   function closeModal() { $("loginModal").classList.add("hidden"); $("loginMsg").textContent = ""; }
-  function openPanel() { const p = $("panel"); p.classList.remove("hidden"); p.setAttribute("aria-hidden", "false"); }
+  function openPanel() { const p = $("panel"); p.classList.remove("hidden"); p.setAttribute("aria-hidden", "false"); hidePeek(); }
   function closePanel() { const p = $("panel"); p.classList.add("hidden"); p.setAttribute("aria-hidden", "true"); selectedId = null; highlightWp(null); highlightLiftPoint(null); }
+
+  // ---- Kompakt rad (peek) vid klick på en ikon ----
+  function showPeek(t) {
+    peekTarget = t;
+    let icon = "📍", name = "", color = DEFAULT_COLOR;
+    if (t.kind === "wp") {
+      const wp = waypoints.find((w) => w.id === t.id); if (!wp) return;
+      name = wp.title || "Namnlös punkt"; icon = wpIcon(wp); color = wpColor(wp);
+      selectedId = t.id; highlightWp(t.id);
+    } else {
+      const lf = (window.CANAZEI_LIFTS || []).find((l) => l.id === t.id); if (!lf) return;
+      name = lf.name; icon = "🚠"; color = "#2b6cb0"; highlightLiftPoint(t.id);
+    }
+    $("peekIc").textContent = icon; $("peekIc").style.background = color;
+    $("peekName").textContent = name;
+    const p = $("panel"); p.classList.add("hidden"); p.setAttribute("aria-hidden", "true");
+    const pk = $("peek"); pk.classList.remove("hidden"); pk.setAttribute("aria-hidden", "false");
+  }
+  function hidePeek() { const pk = $("peek"); if (pk) { pk.classList.add("hidden"); pk.setAttribute("aria-hidden", "true"); } }
+  function peekOpenDetails() {
+    if (!peekTarget) return;
+    const t = peekTarget;
+    if (t.kind === "wp") { const wp = waypoints.find((w) => w.id === t.id); if (wp) { renderView(wp); openPanel(); } }
+    else { const lf = (window.CANAZEI_LIFTS || []).find((l) => l.id === t.id); if (lf) { renderLiftView(lf); openPanel(); } }
+  }
+  function peekCloseClear() { hidePeek(); peekTarget = null; selectedId = null; highlightWp(null); clearLiftHighlight(); highlightLiftPoint(null); }
 
   let statusTimer = null;
   function status(msg, kind, ms) { const el = $("status"); if (!msg) { el.classList.add("hidden"); return; } el.textContent = msg; el.className = kind || ""; el.classList.remove("hidden"); if (statusTimer) clearTimeout(statusTimer); if (ms) statusTimer = setTimeout(() => el.classList.add("hidden"), ms); }
@@ -756,12 +825,14 @@
   function main() {
     if (!window.maplibregl) { document.body.innerHTML = "<p style='padding:20px'>Kunde inte ladda kartbiblioteket.</p>"; return; }
     initMap();
-    $("panelClose").addEventListener("click", () => { if (view === "course") renderPanel(); closePanel(); });
+    $("panelClose").addEventListener("click", () => { closePanel(); if (peekTarget && view === "course") showPeek(peekTarget); });
     $("btnBack").addEventListener("click", exitCourse);
-    $("btnList").addEventListener("click", renderPanel);
+    $("btnList").addEventListener("click", () => { peekCloseClear(); renderPanel(); });
+    $("peekInfo").addEventListener("click", peekOpenDetails);
+    $("peekClose").addEventListener("click", peekCloseClear);
     wireLogin(); initSupabase();
     if (map.loaded()) { loadGroups(); loadWaypoints(); } else map.on("load", () => { loadGroups(); loadWaypoints(); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeModal(); if (view === "course") closePanel(); } });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeModal(); if (view === "course") { closePanel(); peekCloseClear(); } } });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", main); else main();
 })();

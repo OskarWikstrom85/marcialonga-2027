@@ -6,7 +6,7 @@
   <title>Marcialonga 2027 – 3D-karta</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-  <link href="styles.css?v=14" rel="stylesheet" />
+  <link href="styles.css?v=15" rel="stylesheet" />
 </head>
 <body>
   <div id="map"></div>
@@ -32,6 +32,14 @@
 
   <!-- Lista med hållpunkter -->
   <button id="btnList" class="fab" title="Visa hållpunkter">☰</button>
+
+  <!-- Kompakt rad vid vald ikon -->
+  <div id="peek" class="hidden" aria-hidden="true">
+    <span id="peekIc" class="peek-ic"></span>
+    <span id="peekName" class="peek-name"></span>
+    <button id="peekInfo" class="peek-btn" title="Visa detaljer">ℹ️</button>
+    <button id="peekClose" class="peek-btn" aria-label="Stäng">✕</button>
+  </div>
 
   <!-- Info-/redigeringspanel -->
   <aside id="panel" class="hidden" aria-hidden="true">
@@ -60,9 +68,9 @@
   <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-  <script src="config.js?v=14"></script>
-  <script src="route.js?v=14"></script>
-  <script src="lifts.js?v=14"></script>
-  <script src="app.js?v=14"></script>
+  <script src="config.js?v=15"></script>
+  <script src="route.js?v=15"></script>
+  <script src="lifts.js?v=15"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

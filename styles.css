@@ -202,3 +202,24 @@ body.in-course .fab{display:flex;align-items:center;justify-content:center}
 .mode-lbl{flex:1 1 auto}
 .mode-chk{color:var(--ok);font-weight:700}
 .mode-note{font-size:11px;color:var(--muted);font-style:italic}
+
+/* Kompakt rad (peek) vid vald ikon */
+#peek{position:fixed;top:66px;left:50%;transform:translateX(-50%);z-index:20;
+  display:flex;align-items:center;gap:10px;max-width:min(92vw,460px);
+  background:rgba(15,23,32,.92);backdrop-filter:blur(8px);border:1px solid var(--line);
+  border-radius:999px;padding:7px 8px 7px 10px;box-shadow:var(--shadow)}
+#peek.hidden{display:none}
+.peek-ic{flex:0 0 auto;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:16px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.75)}
+.peek-name{flex:1 1 auto;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;color:var(--text)}
+.peek-btn{flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);
+  background:rgba(255,255,255,.06);color:var(--text);font-size:16px;cursor:pointer}
+.peek-btn:hover{border-color:var(--accent)}
+
+/* Färgväljare i gruppformuläret */
+.color-pick{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}
+.color-pick .cp{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.color-pick .cp.on{border-color:var(--text);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--text)}
+.grp-form label.chk{display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;margin:4px 0 2px}
+.grp-form label.chk input{width:auto;margin:0}
