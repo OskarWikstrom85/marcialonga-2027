@@ -40,6 +40,8 @@
   const pills = [];
   const expanded = new Set();          // vilka accordion-sektioner som är öppna
   let selectedId = null, draft = null, addMode = false, newGroupOpen = false, pickIcon = DEFAULT_ICON;
+  let season = "summer";
+  try { if (localStorage.getItem("mly-season") === "winter") season = "winter"; } catch (e) {}
 
   // =====================================================================
   //  Kartstil
@@ -80,11 +82,13 @@
         map.setTerrain({ source: s.terrainSource, exaggeration: CFG.TERRAIN_EXAGGERATION || 1.4 });
       } catch (e) { console.warn("Terräng:", e); }
       try { map.setSky && map.setSky({ "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 }); } catch (e) {}
-      addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers();
+      addWinterLayer(); addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers();
+      applySeason();
       enterOverview(true);
     });
     map.on("error", (e) => console.warn("Kartfel:", e && e.error ? e.error.message : e));
     $("btnReset").addEventListener("click", () => { if (view === "course") frameCurrent(); else resetOverview(); });
+    $("btnSeason").addEventListener("click", toggleSeason);
   }
 
   function addLabels() {
@@ -121,6 +125,50 @@
       for (let j = 1; j < n; j++) out.push([a[0] + dLng * j / n, a[1] + dLat * j / n]);
     }
     out.push(coords[coords.length - 1]); return out;
+  }
+
+  // =====================================================================
+  //  Säsong – sommar/vinter-läge (stiliserad vinter ovanpå satellitbilden)
+  // =====================================================================
+  const SEASONS = {
+    summer: {
+      sat: { "raster-saturation": 0, "raster-contrast": 0, "raster-brightness-min": 0, "raster-brightness-max": 1 },
+      snow: 0, hillExag: 0.35, hillShadow: "#1b2430", hillHighlight: "#ffffff",
+      sky: { "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 },
+    },
+    winter: {
+      sat: { "raster-saturation": -0.55, "raster-contrast": -0.07, "raster-brightness-min": 0.12, "raster-brightness-max": 1 },
+      snow: 0.26, hillExag: 0.55, hillShadow: "#49607b", hillHighlight: "#ffffff",
+      sky: { "sky-color": "#cfe4fb", "horizon-color": "#f6faff", "fog-color": "#eef4fb", "sky-horizon-blend": 0.6, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.22 },
+    },
+  };
+  function addWinterLayer() {
+    if (!map.getLayer("satellite") || map.getLayer("winter-snow")) return;
+    map.addLayer({ id: "winter-snow", type: "background", paint: { "background-color": "#f5fbff", "background-opacity": 0 } });
+  }
+  function applySeason() {
+    const p = SEASONS[season] || SEASONS.summer;
+    try {
+      if (map.getLayer("satellite")) for (const k in p.sat) map.setPaintProperty("satellite", k, p.sat[k]);
+      if (map.getLayer("winter-snow")) map.setPaintProperty("winter-snow", "background-opacity", p.snow);
+      if (map.getLayer("hillshade")) {
+        map.setPaintProperty("hillshade", "hillshade-exaggeration", p.hillExag);
+        map.setPaintProperty("hillshade", "hillshade-shadow-color", p.hillShadow);
+        map.setPaintProperty("hillshade", "hillshade-highlight-color", p.hillHighlight);
+      }
+      if (map.setSky) map.setSky(p.sky);
+    } catch (e) { console.warn("Säsong:", e); }
+    updateSeasonBtn();
+  }
+  function updateSeasonBtn() {
+    const b = $("btnSeason"); if (!b) return;
+    if (season === "winter") { b.textContent = "☀️ Sommar"; b.title = "Växla till sommarvy"; b.classList.add("active"); }
+    else { b.textContent = "❄️ Vinter"; b.title = "Växla till vintervy"; b.classList.remove("active"); }
+  }
+  function toggleSeason() {
+    season = season === "winter" ? "summer" : "winter";
+    try { localStorage.setItem("mly-season", season); } catch (e) {}
+    applySeason();
   }
 
   // =====================================================================
