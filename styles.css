@@ -272,3 +272,21 @@ body.prof-open .fab{bottom:214px}
 #planAdd.on{background:var(--accent);color:#0f1720}
 .plan-save{display:flex;gap:8px}
 .plan-save button{flex:1 1 auto}
+
+/* Pistkartor */
+#pistemaps{position:absolute;top:0;right:0;height:100%;width:min(94vw,380px);z-index:9;
+  background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);
+  transform:translateX(100%);transition:transform .25s ease;overflow-y:auto;padding:52px 18px 24px}
+#pistemaps:not(.hidden){transform:translateX(0)}
+#pistemaps.hidden{transform:translateX(100%)}
+.maps-title{font-size:19px;font-weight:700;margin:0 0 4px}
+.maps-sub{font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.5}
+.maps-note{font-size:11px;color:var(--muted);margin-top:14px;font-style:italic}
+.map-card{display:block;text-decoration:none;color:var(--text);background:var(--panel2);
+  border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;transition:border-color .15s}
+.map-card:hover{border-color:var(--accent)}
+.map-card-top{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.map-name{font-size:14.5px;font-weight:600}
+.map-tag{flex:0 0 auto;font-size:10.5px;background:var(--accent);color:#0f1720;border-radius:999px;padding:2px 8px;font-weight:600}
+.map-desc{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}
+.map-open{font-size:12.5px;color:var(--accent);margin-top:8px;font-weight:600}

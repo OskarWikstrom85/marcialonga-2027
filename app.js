@@ -123,6 +123,8 @@
     $("profClose").addEventListener("click", closeProfile);
     $("btnPlan").addEventListener("click", togglePlanner);
     $("planClose").addEventListener("click", closePlanner);
+    $("btnMaps").addEventListener("click", toggleMaps);
+    $("mapsClose").addEventListener("click", closeMaps);
     window.addEventListener("resize", () => { if (profileOpen) renderProfile(); });
     $("btnSeason").addEventListener("click", (e) => { e.stopPropagation(); toggleModeMenu(); });
   }
@@ -307,9 +309,10 @@
   function enterOverview(initial) {
     view = "overview"; current = null;
     document.body.classList.remove("in-course");
-    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear(); closeProfile(); closePlanner();
+    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear(); closeProfile(); closePlanner(); closeMaps();
     if ($("btnProfile")) $("btnProfile").classList.add("hidden");
     if ($("btnPlan")) $("btnPlan").classList.add("hidden");
+    if ($("btnMaps")) $("btnMaps").classList.add("hidden");
     setRouteVisible(true); addPills();
     if (!initial) resetOverview();
   }
@@ -326,9 +329,10 @@
     frameCurrent(); showMask(b); addWaypointCluster();
     if (map.getLayer("lift-hl-casing")) map.moveLayer("lift-hl-casing");
     if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
-    closeProfile(); registerRouteHover(); closePlanner();
+    closeProfile(); registerRouteHover(); closePlanner(); closeMaps();
     $("btnProfile").classList.toggle("hidden", !hasProfile());
     $("btnPlan").classList.toggle("hidden", !b.hasLifts);
+    $("btnMaps").classList.toggle("hidden", !b.hasLifts);
     renderPanel();
   }
   function exitCourse() { enterOverview(false); }
@@ -746,7 +750,7 @@
   }
   async function openPlanner() {
     if (!current || !current.hasLifts) return;
-    planOpen = true; closePanel(); peekCloseClear(); closeProfile();
+    planOpen = true; closePanel(); peekCloseClear(); closeProfile(); closeMaps();
     showPistes(true);
     const d = $("planner"); d.classList.remove("hidden"); d.setAttribute("aria-hidden", "false");
     $("btnPlan").classList.add("active");
@@ -766,6 +770,46 @@
     map.on("mouseenter", "pistes-hit", () => map.getCanvas().style.cursor = "pointer");
     map.on("mouseleave", "pistes-hit", () => map.getCanvas().style.cursor = "");
   }
+
+  // =====================================================================
+  //  Pistkartor – länkar till officiella kartor (Dolomiti Superski m.fl.)
+  //  Kartorna är upphovsrättsskyddade – vi länkar, kopierar/hostar inte.
+  // =====================================================================
+  const PISTE_MAPS = [
+    { name: "Belvedere – Canazei / Val di Fassa", desc: "Ert hemmaområde · 110 km · Belvedere, Col Rodella, Ciampac–Buffaure", tag: "nära", url: "https://www.dolomitisuperski.com/dam/jcr:ec0bf2cd-4323-4211-b339-b2863f94ff3f/05_Val_di_Fassa_DSS_Karte_fuer_web_2025-2026.pdf" },
+    { name: "Sellaronda", desc: "Hela rundan runt Sellagruppen · med- och moturs", tag: "runda", url: "https://www.dolomitisuperski.com/dam/jcr:5ee6268f-a09e-4046-a690-f673c77abda7/DSS_SellaRonda_2026-2027_web.pdf" },
+    { name: "Val Gardena / Seiser Alm", desc: "181 km · Selva, Ortisei, S. Cristina, Alpe di Siusi", url: "https://www.dolomitisuperski.com/dam/jcr:b8977e3a-44c3-4a63-bd80-c17519e677cc/04_Val_Gardena_Seiser_Alm_DSS_Karte_fuer_web_2025-2026.pdf" },
+    { name: "Alta Badia", desc: "130 km · Corvara, Colfosco, La Villa, San Cassiano", url: "https://www.dolomitisuperski.com/dam/jcr:b654909f-8e83-47fb-acc2-a1798bd83d05/03_Alta_Badia_DSS_Karte_fuer_web_2025-2026.pdf" },
+    { name: "Arabba / Marmolada", desc: "60+ km · Arabba, Porta Vescovo, Marmolada-glaciären", url: "https://www.dolomitisuperski.com/dam/jcr:24e65194-51d4-4aae-9072-c34516f66d5f/06_Arabba_DSS_Karte_fuer_web_2025-2026.pdf" },
+    { name: "Giro della Grande Guerra", desc: "Historisk skirunda · Lagazuoi, Armentarola", url: "https://www.dolomitisuperski.com/dam/jcr:8403015d-28b8-404e-a5c3-121fdbb06983/DSS_GrandeGuerra_2026-2027_web.pdf" },
+    { name: "Hela Dolomiti Superski", desc: "Översikt över alla 12 områden · interaktiv karta + PDF", url: "https://www.dolomitisuperski.com/en/Live-info/Ski-map" },
+  ];
+  function renderMaps() {
+    const body = $("pistemapsBody"); if (!body) return;
+    const cards = PISTE_MAPS.map((m) => `
+      <a class="map-card" href="${m.url}" target="_blank" rel="noopener">
+        <div class="map-card-top"><span class="map-name">${esc(m.name)}</span>${m.tag ? `<span class="map-tag">${esc(m.tag)}</span>` : ""}</div>
+        <div class="map-desc">${esc(m.desc)}</div>
+        <div class="map-open">Öppna karta ↗</div>
+      </a>`).join("");
+    body.innerHTML = `
+      <h2 class="maps-title">Pistkartor</h2>
+      <p class="maps-sub">Officiella kartor för skidområdena runt Canazei. Öppnas från respektive områdes webbplats.</p>
+      ${cards}
+      <p class="maps-note">Kartorna tillhör Dolomiti Superski och respektive skidområde.</p>`;
+  }
+  function openMaps() {
+    if (!current || !current.hasLifts) return;
+    closePanel(); peekCloseClear(); closeProfile(); closePlanner();
+    renderMaps();
+    const d = $("pistemaps"); d.classList.remove("hidden"); d.setAttribute("aria-hidden", "false");
+    $("btnMaps").classList.add("active");
+  }
+  function closeMaps() {
+    const d = $("pistemaps"); if (d) { d.classList.add("hidden"); d.setAttribute("aria-hidden", "true"); }
+    const b = $("btnMaps"); if (b) b.classList.remove("active");
+  }
+  function toggleMaps() { $("pistemaps").classList.contains("hidden") ? openMaps() : closeMaps(); }
 
   function showEditMarker() {
     removeEditMarker();
