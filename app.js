@@ -52,19 +52,35 @@
   //  Kartstil
   // =====================================================================
   function buildStyle() {
+    // Vinter-baslager definieras direkt i stilen (ej via addSource i efterhand),
+    // eftersom MapLibre med 3D-terräng aldrig rapporterar stilen som "loaded".
+    const sources = {
+      satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256, maxzoom: 19, attribution: "Satellit © Esri, Maxar, Earthstar Geographics" },
+      terrarium: { type: "raster-dem", tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        encoding: "terrarium", tileSize: 256, maxzoom: 15, attribution: "Höjddata: Mapzen / AWS Terrain Tiles" },
+    };
+    const baseLayers = [];
+    if (cfgHas("MAPTILER_KEY")) {
+      sources["maptiler-winter"] = { type: "raster", tiles: [`https://api.maptiler.com/maps/winter/256/{z}/{x}/{y}.png?key=${String(CFG.MAPTILER_KEY).trim()}`],
+        tileSize: 256, maxzoom: 22, attribution: "© MapTiler © OpenStreetMap contributors" };
+      baseLayers.push({ id: "base-maptiler-winter", type: "raster", source: "maptiler-winter", layout: { visibility: "none" } });
+    }
+    if (cfgHas("SENTINEL_WMS")) {
+      sources["sentinel-winter"] = { type: "raster", tiles: [String(CFG.SENTINEL_WMS).trim()],
+        tileSize: 512, maxzoom: 17, attribution: "Sentinel-2 © Copernicus / ESA" };
+      baseLayers.push({ id: "base-sentinel-winter", type: "raster", source: "sentinel-winter", layout: { visibility: "none" } });
+    }
     const style = {
       version: 8,
       glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
-      sources: {
-        satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-          tileSize: 256, maxzoom: 19, attribution: "Satellit © Esri, Maxar, Earthstar Geographics" },
-        terrarium: { type: "raster-dem", tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
-          encoding: "terrarium", tileSize: 256, maxzoom: 15, attribution: "Höjddata: Mapzen / AWS Terrain Tiles" },
-      },
+      sources,
       layers: [
         { id: "bg", type: "background", paint: { "background-color": "#9fc0e6" } },
         { id: "satellite", type: "raster", source: "satellite" },
+        ...baseLayers,
         { id: "hillshade", type: "hillshade", source: "terrarium", paint: { "hillshade-exaggeration": 0.35, "hillshade-shadow-color": "#1b2430" } },
+        { id: "winter-snow", type: "background", paint: { "background-color": "#f5fbff", "background-opacity": 0 } },
       ],
     };
     return { style, terrainSource: "terrarium", terrainTiles: null };
@@ -75,7 +91,6 @@
     const start = CFG.START || { lng: 11.59, lat: 46.38, zoom: 10.3, pitch: 55, bearing: 15 };
     map = new maplibregl.Map({ container: "map", style: s.style, center: [start.lng, start.lat],
       zoom: start.zoom, pitch: start.pitch, bearing: start.bearing, maxPitch: 85, attributionControl: { compact: true } });
-    window.__map = map; // TILLFÄLLIG felsökning
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
@@ -85,7 +100,6 @@
         map.setTerrain({ source: s.terrainSource, exaggeration: CFG.TERRAIN_EXAGGERATION || 1.4 });
       } catch (e) { console.warn("Terräng:", e); }
       try { map.setSky && map.setSky({ "sky-color": "#aed2f5", "horizon-color": "#eaf2fb", "fog-color": "#dfeaf6", "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.6, "fog-ground-blend": 0.3 }); } catch (e) {}
-      addWinterLayer(); ensureMapTilerBase(); ensureSentinelBase();
       addLabels(); addRoute(); registerLiftHandlers(); registerWaypointHandlers();
       applyMode();
       enterOverview(true);
@@ -148,42 +162,21 @@
   const MODE_ORDER = ["sommar", "vinter", "vinterkarta", "vintersat"];
   function cfgHas(name) { return !!(CFG[name] && String(CFG[name]).trim()); }
 
-  function addWinterLayer() {
-    if (!map.getLayer("satellite") || map.getLayer("winter-snow")) return;
-    map.addLayer({ id: "winter-snow", type: "background", paint: { "background-color": "#f5fbff", "background-opacity": 0 } });
-  }
-  function ensureMapTilerBase() {
-    if (map.getLayer("base-maptiler-winter")) return true;
-    if (!cfgHas("MAPTILER_KEY")) return false;
-    const url = `https://api.maptiler.com/maps/winter/256/{z}/{x}/{y}.png?key=${String(CFG.MAPTILER_KEY).trim()}`;
-    if (!map.getSource("maptiler-winter")) map.addSource("maptiler-winter", { type: "raster", tiles: [url], tileSize: 256, maxzoom: 22, attribution: "© MapTiler © OpenStreetMap contributors" });
-    map.addLayer({ id: "base-maptiler-winter", type: "raster", source: "maptiler-winter", layout: { visibility: "none" } }, "hillshade");
-    return true;
-  }
-  function ensureSentinelBase() {
-    if (map.getLayer("base-sentinel-winter")) return true;
-    if (!cfgHas("SENTINEL_WMS")) return false;
-    // CFG.SENTINEL_WMS ska vara en WMS-URL-mall med {bbox-epsg-3857}
-    if (!map.getSource("sentinel-winter")) map.addSource("sentinel-winter", { type: "raster", tiles: [String(CFG.SENTINEL_WMS).trim()], tileSize: 512, maxzoom: 17, attribution: "Sentinel-2 © Copernicus / ESA" });
-    map.addLayer({ id: "base-sentinel-winter", type: "raster", source: "sentinel-winter", layout: { visibility: "none" } }, "hillshade");
-    return true;
-  }
   function setBaseVisible(which) {
     const all = { satellite: "satellite", "maptiler-winter": "base-maptiler-winter", "sentinel-winter": "base-sentinel-winter" };
     for (const k in all) { const lid = all[k]; if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", which === k ? "visible" : "none"); }
   }
-  function modeAvailable(key) { const m = MODES[key]; return m && (!m.needs || cfgHas(m.needs)); }
+  function modeAvailable(key) { const m = MODES[key]; return m && (!m.needs || map.getLayer("base-" + m.base)); }
 
   function applyMode() {
     if (!modeAvailable(mode)) mode = "vinter";
     const m = MODES[mode] || MODES.sommar;
     try {
+      // Baslagren finns redan i stilen (byggda i buildStyle); här togglas bara synlighet.
       let baseKey = "satellite";
-      if (m.base === "maptiler-winter" && ensureMapTilerBase()) baseKey = "maptiler-winter";
-      else if (m.base === "sentinel-winter" && ensureSentinelBase()) baseKey = "sentinel-winter";
+      if (m.base === "maptiler-winter" && map.getLayer("base-maptiler-winter")) baseKey = "maptiler-winter";
+      else if (m.base === "sentinel-winter" && map.getLayer("base-sentinel-winter")) baseKey = "sentinel-winter";
       setBaseVisible(baseKey);
-      // Om det nya baslagret inte kunde läggas till än (stilen laddar) – försök igen när kartan är redo
-      if (m.base !== "satellite" && baseKey === "satellite" && modeAvailable(mode)) map.once("idle", applyMode);
       if (m.sat && map.getLayer("satellite")) for (const k in m.sat) map.setPaintProperty("satellite", k, m.sat[k]);
       if (map.getLayer("winter-snow")) map.setPaintProperty("winter-snow", "background-opacity", m.snow);
       if (map.getLayer("hillshade")) {
