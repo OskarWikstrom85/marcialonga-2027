@@ -887,7 +887,8 @@
   // ---- Klicka för att flyga 3D-vyn till ett ställe (samma vinkel & zoom) ----
   function flyTo3D(lng, lat, offset) {
     if (lng == null || lat == null) return;
-    map.flyTo({ center: [lng, lat], zoom: 15, pitch: 60, bearing: map.getBearing(), duration: 1200, offset: offset || [0, 0], essential: true });
+    // Panorera bara till positionen – behåll nuvarande zoom, lutning och riktning.
+    map.easeTo({ center: [lng, lat], offset: offset || [0, 0], duration: 800, essential: true });
   }
   function featureMid(kind, id) {
     if (kind === "lift") { const l = liftById2(id); return l && (l.mid || (l.coords && l.coords[l.coords.length >> 1])); }
