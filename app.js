@@ -884,12 +884,12 @@
         { id: "pm-hl-line", type: "line", source: "pm-hl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ff2d2d", "line-width": 5 } },
         { id: "pm-pistes-hit", type: "line", source: "pm-pistes", paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 16 } },
         { id: "pm-lifts-hit", type: "line", source: "pm-lifts", paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 16 } },
-        { id: "pm-num-pistes", type: "symbol", source: "pm-num-pistes", minzoom: 12.5,
-          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 12, "text-allow-overlap": false, "text-padding": 4 },
+        { id: "pm-num-pistes", type: "symbol", source: "pm-num-pistes", minzoom: 13.5,
+          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 12, "text-allow-overlap": true, "text-ignore-placement": true },
           paint: { "text-color": ["get", "color"], "text-halo-color": "#ffffff", "text-halo-width": 2.4 } },
         { id: "pm-num-lifts", type: "symbol", source: "pm-num-lifts", minzoom: 12.5,
-          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 12.5, "text-allow-overlap": false, "text-padding": 4 },
-          paint: { "text-color": "#ffffff", "text-halo-color": ["get", "color"], "text-halo-width": 3.2 } },
+          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 12.5, "text-allow-overlap": true, "text-ignore-placement": true },
+          paint: { "text-color": "#ffffff", "text-halo-color": ["get", "color"], "text-halo-width": 3.4 } },
       ],
     };
     const b = new maplibregl.LngLatBounds();
