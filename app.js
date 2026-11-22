@@ -125,6 +125,7 @@
       enterOverview(true);
     });
     map.on("error", (e) => console.warn("Kartfel:", e && e.error ? e.error.message : e));
+    setupResizers();
     $("btnReset").addEventListener("click", () => { if (view === "course") frameCurrent(); else resetOverview(); });
     $("btnProfile").addEventListener("click", toggleProfile);
     $("profClose").addEventListener("click", closeProfile);
@@ -533,6 +534,7 @@
   function renderProfile() {
     const P = profData(); if (!P) return;
     PROF.W = Math.max(320, $("profChart").clientWidth || 600);
+    PROF.H = Math.max(90, $("profChart").clientHeight || 150);
     const pts = P.pts, VW = PROF.W, VH = PROF.H, step = Math.max(1, Math.round(pts.length / 170));
     let segs = "", prev = pts[0];
     for (let i = step; i < pts.length; i += step) {
@@ -991,6 +993,57 @@
     if (!planOpen) showPistes(false);
   }
   function togglePistmap() { $("pistmap").classList.contains("hidden") ? openPistmap() : closePistmap(); }
+
+  // =====================================================================
+  //  Dragbara storlekar på panelerna (sparas per device i localStorage)
+  // =====================================================================
+  function makeResizable(el, o) {
+    if (!el || el.querySelector(":scope > .resize-handle")) return;
+    const h = document.createElement("div");
+    h.className = "resize-handle " + (o.axis === "y" ? "resize-h" : "resize-w");
+    el.appendChild(h);
+    const setSize = (s) => { if (o.axis === "y") el.style.height = s + "px"; else el.style.width = s + "px"; if (o.mirror) o.mirror(s); };
+    h.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const startPos = o.axis === "y" ? e.clientY : e.clientX;
+      const r = el.getBoundingClientRect();
+      const startSize = o.axis === "y" ? r.height : r.width;
+      document.body.style.userSelect = "none";
+      let raf = 0;
+      const move = (ev) => {
+        const cur = o.axis === "y" ? ev.clientY : ev.clientX;
+        const s = Math.max(o.min, Math.min(o.max(), startSize + (startPos - cur)));
+        setSize(s);
+        if (o.live && !raf) raf = requestAnimationFrame(() => { raf = 0; o.live(); });
+      };
+      const up = () => {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+        document.body.style.userSelect = "";
+        if (o.live) o.live();
+        try { localStorage.setItem(o.key, String(Math.round(o.axis === "y" ? el.getBoundingClientRect().height : el.getBoundingClientRect().width))); } catch (err) {}
+      };
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+    });
+  }
+  function applyStoredSizes() {
+    const get = (k) => { try { return +localStorage.getItem(k) || 0; } catch (e) { return 0; } };
+    let v = get("mc_panelW");
+    if (v) { const w = Math.min(v, window.innerWidth * 0.97); ["panel", "planner", "pistemaps"].forEach((id) => { const e = $(id); if (e) e.style.width = w + "px"; }); }
+    v = get("mc_pistmapW");
+    if (v && $("pistmap")) $("pistmap").style.width = Math.min(v, window.innerWidth * 0.98) + "px";
+    v = get("mc_profileH");
+    if (v && $("profile")) $("profile").style.height = Math.min(v, window.innerHeight * 0.72) + "px";
+  }
+  function setupResizers() {
+    const groupA = ["panel", "planner", "pistemaps"];
+    const mirrorA = (w) => groupA.forEach((id) => { const e = $(id); if (e) e.style.width = w + "px"; });
+    groupA.forEach((id) => makeResizable($(id), { axis: "x", min: 240, max: () => window.innerWidth * 0.97, key: "mc_panelW", mirror: mirrorA }));
+    makeResizable($("pistmap"), { axis: "x", min: 300, max: () => window.innerWidth * 0.98, key: "mc_pistmapW", live: () => { if (pmap) pmap.resize(); } });
+    makeResizable($("profile"), { axis: "y", min: 120, max: () => window.innerHeight * 0.72, key: "mc_profileH", live: () => { if (profileOpen) renderProfile(); } });
+    applyStoredSizes();
+  }
 
   function showEditMarker() {
     removeEditMarker();
