@@ -559,6 +559,12 @@
     profSvg.addEventListener("mouseleave", clearCursor);
     profSvg.addEventListener("touchstart", (e) => { if (e.touches[0]) move(e.touches[0].clientX); }, { passive: true });
     profSvg.addEventListener("touchmove", (e) => { if (e.touches[0]) move(e.touches[0].clientX); }, { passive: true });
+    profSvg.addEventListener("click", (e) => {
+      const r = profSvg.getBoundingClientRect(); const x = (e.clientX - r.left) * (VW / r.width);
+      const d = Math.max(0, Math.min(P.distKm, pxInv(x))); const pos = profAt(d);
+      const pr = $("profile"); const h = pr ? pr.getBoundingClientRect().height : 0;
+      setCursor(d); flyTo3D(pos.lng, pos.lat, [0, -(h / 2) - 20]);
+    });
     profSvg.querySelectorAll(".pf-wp").forEach((c) => c.addEventListener("click", (e) => { e.stopPropagation(); selectWaypoint(coerceId(c.getAttribute("data-id")), true); }));
   }
   function setCursor(d) {
@@ -878,6 +884,22 @@
   }
   function clearLink() { linkCur = null; setHL(map, "linkhl", null); if (pmap) setHL(pmap, "pm-hl", null); if (map.getSource("linkhl-num")) map.getSource("linkhl-num").setData({ type: "FeatureCollection", features: [] }); }
 
+  // ---- Klicka för att flyga 3D-vyn till ett ställe (samma vinkel & zoom) ----
+  function flyTo3D(lng, lat, offset) {
+    if (lng == null || lat == null) return;
+    map.flyTo({ center: [lng, lat], zoom: 15, pitch: 60, bearing: map.getBearing(), duration: 1200, offset: offset || [0, 0], essential: true });
+  }
+  function featureMid(kind, id) {
+    if (kind === "lift") { const l = liftById2(id); return l && (l.mid || (l.coords && l.coords[l.coords.length >> 1])); }
+    const p = pisteById(id); return p && p.geom && p.geom[p.geom.length >> 1];
+  }
+  function flyFeature(kind, id) {
+    const mid = featureMid(kind, id); if (!mid) return;
+    const pm = $("pistmap"); const open = pm && !pm.classList.contains("hidden");
+    const w = open ? pm.getBoundingClientRect().width : 0;
+    flyTo3D(mid[0], mid[1], [-(w / 2), 0]);
+  }
+
   function buildPmap() {
     if (pmap) return;
     const base = cfgHas("MAPTILER_KEY")
@@ -918,6 +940,8 @@
       pmap.on("mousemove", "pm-pistes-hit", hover("piste"));
       pmap.on("mousemove", "pm-lifts-hit", hover("lift"));
       ["pm-pistes-hit", "pm-lifts-hit"].forEach((l) => pmap.on("mouseleave", l, () => { pmap.getCanvas().style.cursor = ""; clearLink(); }));
+      pmap.on("click", "pm-lifts-hit", (e) => { if (e.features && e.features[0]) flyFeature("lift", e.features[0].properties.id); });
+      pmap.on("click", "pm-pistes-hit", (e) => { if (e.features && e.features[0]) flyFeature("piste", e.features[0].properties.id); });
       // Nummer-etiketterna placeras inte av MapLibre vid första laddning – tvinga fram det med en setData-knuff
       // medan lagret är synligt, och styr sedan synlighet per zoom (mina 12,5–14, OpenSnowMaps egna tar vid 14+).
       setTimeout(() => { try { pmap.getSource("pm-num-pistes").setData(numFC("piste")); pmap.getSource("pm-num-lifts").setData(numFC("lift")); pmSyncNums(); } catch (e) {} }, 150);
