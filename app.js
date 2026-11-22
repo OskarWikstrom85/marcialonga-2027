@@ -610,11 +610,11 @@
   }
 
   // ---- steg-geometri & position ----
-  function stepGeom(s) { if (s.kind === "lift") { const l = liftById2(s.ref); return l ? l.coords : null; } const p = pisteById(s.ref); return p ? p.geom : null; }
-  function stepName(s) { if (s.kind === "lift") { const l = liftById2(s.ref); return l ? l.name : "Lift"; } const p = pisteById(s.ref); return p ? (p.name || "Namnlös nedfart") : "Nedfart"; }
+  function stepGeom(s) { if (s.geom) return s.geom; if (s.kind === "lift") { const l = liftById2(s.ref); return l ? l.coords : null; } const p = pisteById(s.ref); return p ? p.geom : null; }
+  function stepName(s) { if (s.name) return s.name; if (s.kind === "lift") { const l = liftById2(s.ref); return l ? l.name : "Lift"; } const p = pisteById(s.ref); return p ? (p.name || "Namnlös nedfart") : "Nedfart"; }
   function stepEntryExit(s, prevEnd) {
-    if (s.kind === "piste") { const p = pisteById(s.ref); if (!p) return null; return { entry: p.top || p.geom[0], exit: p.bot || p.geom[p.geom.length - 1] }; }
-    const l = liftById2(s.ref); if (!l) return null; const e = liftEnds(l);
+    if (s.kind === "piste") { const g = stepGeom(s); if (!g || !g.length) return null; const p = s.geom ? null : pisteById(s.ref); return { entry: (p && p.top) || g[0], exit: (p && p.bot) || g[g.length - 1] }; }
+    const g = stepGeom(s); if (!g || !g.length) return null; const e = [g[0], g[g.length - 1]];
     if (!prevEnd) return { entry: e[0], exit: e[1] };
     const board = dxy(e[0], prevEnd) <= dxy(e[1], prevEnd) ? e[0] : e[1];
     const top = board === e[0] ? e[1] : e[0];
@@ -631,8 +631,8 @@
     const steps = curPlan ? curPlan.steps : [];
     let lifts = 0, pistes = 0, drop = 0, t = 0;
     steps.forEach((s) => {
-      if (s.kind === "lift") { lifts++; const l = liftById2(s.ref); if (l) t += (l.len || 0) / (LIFT_SPEED[l.type] || 3) + 150; }
-      else { pistes++; const p = pisteById(s.ref); if (p) { if (p.drop != null) drop += p.drop; t += (p.len || 0) / 7 + 20; } }
+      if (s.kind === "lift") { lifts++; const l = s.geom ? null : liftById2(s.ref); const len = s.len != null ? s.len : (l ? l.len : 0); const type = s.type || (l ? l.type : null); t += (len || 0) / (LIFT_SPEED[type] || 3) + 150; }
+      else { pistes++; const p = s.geom ? null : pisteById(s.ref); const dr = s.drop != null ? s.drop : (p ? p.drop : null); const len = s.len != null ? s.len : (p ? p.len : 0); if (dr != null) drop += dr; t += (len || 0) / 7 + 20; }
     });
     const mins = Math.round(t / 60);
     const tStr = mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`;
@@ -645,7 +645,7 @@
     const lines = { type: "FeatureCollection", features: [] }, nums = { type: "FeatureCollection", features: [] };
     steps.forEach((s, i) => {
       const g = stepGeom(s); if (!g) return;
-      const color = s.kind === "lift" ? "#60a5fa" : (DIFF_COLOR[(pisteById(s.ref) || {}).diff] || "#e23b3b");
+      const color = s.kind === "lift" ? "#60a5fa" : (DIFF_COLOR[(s.geom ? s.diff : (pisteById(s.ref) || {}).diff)] || "#e23b3b");
       lines.features.push({ type: "Feature", properties: { kind: s.kind, color }, geometry: { type: "LineString", coordinates: g } });
       if (pos[i]) nums.features.push({ type: "Feature", properties: { n: String(i + 1) }, geometry: { type: "Point", coordinates: pos[i].entry } });
     });
@@ -715,9 +715,9 @@
     if (curPlan && curPlan.steps.length) {
       steps = curPlan.steps.map((s, i) => {
         const up = s.kind === "lift";
-        const meta = up ? (() => { const l = liftById2(s.ref); return l ? `↑ lift · +${l.drop || "?"} hm` : "lift"; })()
-          : (() => { const p = pisteById(s.ref); return p ? `↓ ${DIFF_SV[p.diff] || "pist"} · ${p.drop != null ? "−" + p.drop + " hm · " : ""}${(p.len / 1000).toFixed(1)} km` : "nedfart"; })();
-        const col = up ? "#60a5fa" : (DIFF_COLOR[(pisteById(s.ref) || {}).diff] || "#e23b3b");
+        const meta = up ? (() => { const l = s.geom ? null : liftById2(s.ref); const dr = s.drop != null ? s.drop : (l ? l.drop : null); return `↑ lift${dr != null ? " · +" + dr + " hm" : ""}`; })()
+          : (() => { const p = s.geom ? null : pisteById(s.ref); const df = s.geom ? s.diff : (p ? p.diff : null); const dr = s.drop != null ? s.drop : (p ? p.drop : null); const len = s.len != null ? s.len : (p ? p.len : null); return `↓ ${DIFF_SV[df] || "pist"}${dr != null ? " · −" + dr + " hm" : ""}${len != null ? " · " + (len / 1000).toFixed(1) + " km" : ""}`; })();
+        const col = up ? "#60a5fa" : (DIFF_COLOR[(s.geom ? s.diff : (pisteById(s.ref) || {}).diff)] || "#e23b3b");
         const ctrls = canEdit ? `<div class="step-ctrls"><button data-mv="${i}:-1" ${i === 0 ? "disabled" : ""}>↑</button><button data-mv="${i}:1" ${i === curPlan.steps.length - 1 ? "disabled" : ""}>↓</button><button data-rm="${i}" class="rm">✕</button></div>` : "";
         return `<div class="step-row"><div class="step-num" style="background:${col}">${i + 1}</div><div class="step-txt"><div class="step-name">${up ? "🚠 " : ""}${esc(stepName(s))}</div><div class="step-meta">${meta}</div></div>${ctrls}</div>`;
       }).join("");
