@@ -66,6 +66,7 @@
       "pistes": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
       "plan-lines": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
       "plan-nums": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+      "linkhl": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
     };
     const baseLayers = [];
     if (cfgHas("MAPTILER_KEY")) {
@@ -94,6 +95,8 @@
         { id: "plan-line", type: "line", source: "plan-lines", layout: { visibility: "none", "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5 } },
         { id: "plan-nums", type: "symbol", source: "plan-nums", layout: { visibility: "none", "text-field": ["get", "n"], "text-font": ["Open Sans Bold"], "text-size": 13, "text-allow-overlap": true }, paint: { "text-color": "#fff", "text-halo-color": "#0b1a2a", "text-halo-width": 2.5 } },
         { id: "route-pos-dot", type: "circle", source: "route-pos", layout: { visibility: "none" }, paint: { "circle-radius": 7, "circle-color": "#ff6a2b", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } },
+        { id: "linkhl-casing", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#1b1200", "line-width": 10, "line-opacity": 0.55 } },
+        { id: "linkhl-line", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ffe100", "line-width": 5 } },
       ],
     };
     return { style, terrainSource: "terrarium", terrainTiles: null };
@@ -125,6 +128,8 @@
     $("planClose").addEventListener("click", closePlanner);
     $("btnMaps").addEventListener("click", toggleMaps);
     $("mapsClose").addEventListener("click", closeMaps);
+    $("btnPistmap").addEventListener("click", togglePistmap);
+    $("pistmapClose").addEventListener("click", closePistmap);
     window.addEventListener("resize", () => { if (profileOpen) renderProfile(); });
     $("btnSeason").addEventListener("click", (e) => { e.stopPropagation(); toggleModeMenu(); });
   }
@@ -309,10 +314,11 @@
   function enterOverview(initial) {
     view = "overview"; current = null;
     document.body.classList.remove("in-course");
-    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear(); closeProfile(); closePlanner(); closeMaps();
+    removeMask(); removeOverlay(); removeLiftCluster(); removeWaypointCluster(); removeEditMarker(); clearLiftHighlight(); highlightLiftPoint(null); closePanel(); peekCloseClear(); closeProfile(); closePlanner(); closeMaps(); closePistmap();
     if ($("btnProfile")) $("btnProfile").classList.add("hidden");
     if ($("btnPlan")) $("btnPlan").classList.add("hidden");
     if ($("btnMaps")) $("btnMaps").classList.add("hidden");
+    if ($("btnPistmap")) $("btnPistmap").classList.add("hidden");
     setRouteVisible(true); addPills();
     if (!initial) resetOverview();
   }
@@ -329,10 +335,11 @@
     frameCurrent(); showMask(b); addWaypointCluster();
     if (map.getLayer("lift-hl-casing")) map.moveLayer("lift-hl-casing");
     if (map.getLayer("lift-hl-l")) map.moveLayer("lift-hl-l");
-    closeProfile(); registerRouteHover(); closePlanner(); closeMaps();
+    closeProfile(); registerRouteHover(); closePlanner(); closeMaps(); closePistmap();
     $("btnProfile").classList.toggle("hidden", !hasProfile());
     $("btnPlan").classList.toggle("hidden", !b.hasLifts);
     $("btnMaps").classList.toggle("hidden", !b.hasLifts);
+    $("btnPistmap").classList.toggle("hidden", !b.hasLifts);
     renderPanel();
   }
   function exitCourse() { enterOverview(false); }
@@ -750,7 +757,7 @@
   }
   async function openPlanner() {
     if (!current || !current.hasLifts) return;
-    planOpen = true; closePanel(); peekCloseClear(); closeProfile(); closeMaps();
+    planOpen = true; closePanel(); peekCloseClear(); closeProfile(); closeMaps(); closePistmap();
     showPistes(true);
     const d = $("planner"); d.classList.remove("hidden"); d.setAttribute("aria-hidden", "false");
     $("btnPlan").classList.add("active");
@@ -800,7 +807,7 @@
   }
   function openMaps() {
     if (!current || !current.hasLifts) return;
-    closePanel(); peekCloseClear(); closeProfile(); closePlanner();
+    closePanel(); peekCloseClear(); closeProfile(); closePlanner(); closePistmap();
     renderMaps();
     const d = $("pistemaps"); d.classList.remove("hidden"); d.setAttribute("aria-hidden", "false");
     $("btnMaps").classList.add("active");
@@ -810,6 +817,105 @@
     const b = $("btnMaps"); if (b) b.classList.remove("active");
   }
   function toggleMaps() { $("pistemaps").classList.contains("hidden") ? openMaps() : closeMaps(); }
+
+  // =====================================================================
+  //  Interaktiv 2D-pistkarta med länkad hover mot 3D-kartan
+  // =====================================================================
+  let pmap = null, pm3dWired = false, pmBoendeMarkers = [], pmOpen = false, linkCur = null;
+  function liftLineFC() {
+    return { type: "FeatureCollection", features: (window.CANAZEI_LIFTS || []).filter((l) => l.coords && l.coords.length > 1)
+      .map((l) => ({ type: "Feature", properties: { id: l.id }, geometry: { type: "LineString", coordinates: l.coords } })) };
+  }
+  function pmBoende() {
+    const id = current ? current.id : null;
+    return waypoints.filter((w) => (w.area_id || "marcialonga") === id && typeof w.lng === "number" && typeof w.lat === "number")
+      .filter((w) => { const g = groupById(w.group_id); return g && /boende/i.test(g.name || ""); });
+  }
+  function linkGeom(kind, id) { if (kind === "lift") { const l = liftById2(id); return l ? l.coords : null; } const p = pisteById(id); return p ? p.geom : null; }
+  function setHL(m, src, geom) {
+    if (!m || !m.getSource(src)) return;
+    m.getSource(src).setData(geom ? { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: geom } } : { type: "FeatureCollection", features: [] });
+  }
+  function ensurePmVisible(kind, id) {
+    if (!pmap) return; const g = linkGeom(kind, id); if (!g || !g.length) return;
+    const b = new maplibregl.LngLatBounds(); g.forEach((c) => b.extend(c));
+    if (!pmap.getBounds().contains(b.getCenter())) pmap.easeTo({ center: b.getCenter(), duration: 500 });
+  }
+  function linkHover(kind, id, from) {
+    const key = kind + ":" + id;
+    if (key !== linkCur) { linkCur = key; const g = linkGeom(kind, id); setHL(map, "linkhl", g); if (pmap) setHL(pmap, "pm-hl", g); }
+    if (from === "main") ensurePmVisible(kind, id);
+  }
+  function clearLink() { linkCur = null; setHL(map, "linkhl", null); if (pmap) setHL(pmap, "pm-hl", null); }
+
+  function buildPmap() {
+    if (pmap) return;
+    const base = cfgHas("MAPTILER_KEY")
+      ? { tiles: [`https://api.maptiler.com/maps/winter/256/{z}/{x}/{y}.png?key=${String(CFG.MAPTILER_KEY).trim()}`], attr: "© MapTiler © OpenStreetMap contributors" }
+      : { tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png", "https://b.tile.opentopomap.org/{z}/{x}/{y}.png"], attr: "© OpenTopoMap (CC-BY-SA)" };
+    const style = {
+      version: 8, glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
+      sources: {
+        pmbase: { type: "raster", tiles: base.tiles, tileSize: 256, maxzoom: 20, attribution: base.attr },
+        pmsnow: { type: "raster", tiles: ["https://www.opensnowmap.org/pistes/{z}/{x}/{y}.png"], tileSize: 256, maxzoom: 18, attribution: "Pister & liftar © OpenSnowMap, OpenStreetMap" },
+        "pm-pistes": { type: "geojson", data: pistesFC() },
+        "pm-lifts": { type: "geojson", data: liftLineFC() },
+        "pm-hl": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+      },
+      layers: [
+        { id: "pmbase-l", type: "raster", source: "pmbase" },
+        { id: "pmsnow-l", type: "raster", source: "pmsnow" },
+        { id: "pm-hl-casing", type: "line", source: "pm-hl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#1b1200", "line-width": 11, "line-opacity": 0.5 } },
+        { id: "pm-hl-line", type: "line", source: "pm-hl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ff2d2d", "line-width": 5 } },
+        { id: "pm-pistes-hit", type: "line", source: "pm-pistes", paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 16 } },
+        { id: "pm-lifts-hit", type: "line", source: "pm-lifts", paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 16 } },
+      ],
+    };
+    const b = new maplibregl.LngLatBounds();
+    (window.CANAZEI_PISTES || []).forEach((p) => (p.geom || []).forEach((c) => b.extend(c)));
+    pmap = new maplibregl.Map({ container: "pm-map", style, bounds: b.isEmpty() ? undefined : b, fitBoundsOptions: { padding: 30 } });
+    pmap.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+    pmap.on("load", () => {
+      const hover = (kind) => (e) => { if (e.features && e.features[0]) { linkHover(kind, e.features[0].properties.id, "pm"); pmap.getCanvas().style.cursor = "pointer"; } };
+      pmap.on("mousemove", "pm-pistes-hit", hover("piste"));
+      pmap.on("mousemove", "pm-lifts-hit", hover("lift"));
+      ["pm-pistes-hit", "pm-lifts-hit"].forEach((l) => pmap.on("mouseleave", l, () => { pmap.getCanvas().style.cursor = ""; clearLink(); }));
+    });
+  }
+  function pmAddBoende() {
+    pmBoendeMarkers.forEach((m) => m.remove()); pmBoendeMarkers = [];
+    if (!pmap) return;
+    pmBoende().forEach((w) => {
+      const el = document.createElement("div"); el.className = "pm-boende";
+      const g = groupById(w.group_id); if (g && g.color) el.style.background = g.color;
+      el.innerHTML = `<span>${(g && g.icon) || "🏨"}</span>`; el.title = w.name || "Boende";
+      pmBoendeMarkers.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([w.lng, w.lat]).addTo(pmap));
+    });
+  }
+  function wire3DHover() {
+    if (pm3dWired) return; pm3dWired = true;
+    const h = (kind) => (e) => { if (pmOpen && e.features && e.features[0]) linkHover(kind, e.features[0].properties.id, "main"); };
+    map.on("mousemove", "pistes-hit", h("piste"));
+    map.on("mousemove", "lift-hit", h("lift"));
+    ["pistes-hit", "lift-hit"].forEach((l) => map.on("mouseleave", l, () => { if (pmOpen) clearLink(); }));
+  }
+  function openPistmap() {
+    if (!current || !current.hasLifts) return;
+    closePanel(); peekCloseClear(); closeProfile(); closePlanner(); closeMaps();
+    pmOpen = true; showPistes(true); wire3DHover();
+    const d = $("pistmap"); d.classList.remove("hidden"); d.setAttribute("aria-hidden", "false");
+    $("btnPistmap").classList.add("active");
+    buildPmap();
+    setTimeout(() => { if (pmap) { pmap.resize(); pmAddBoende(); } }, 60);
+    const off = $("pm-official"); if (off) { off.href = "https://www.dolomitisuperski.com/dam/jcr:5ee6268f-a09e-4046-a690-f673c77abda7/DSS_SellaRonda_2026-2027_web.pdf"; off.classList.remove("hidden"); }
+  }
+  function closePistmap() {
+    pmOpen = false; clearLink();
+    const d = $("pistmap"); if (d) { d.classList.add("hidden"); d.setAttribute("aria-hidden", "true"); }
+    const b = $("btnPistmap"); if (b) b.classList.remove("active");
+    if (!planOpen) showPistes(false);
+  }
+  function togglePistmap() { $("pistmap").classList.contains("hidden") ? openPistmap() : closePistmap(); }
 
   function showEditMarker() {
     removeEditMarker();

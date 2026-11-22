@@ -22,7 +22,8 @@
     <button id="btnReset" class="tool" title="Återställ vyn">⟲ Vy</button>
     <button id="btnProfile" class="tool hidden" title="Visa banprofil">📈 Banprofil</button>
     <button id="btnPlan" class="tool hidden" title="Dagsplanering">🗺️ Dagsplan</button>
-    <button id="btnMaps" class="tool hidden" title="Pistkartor">⛷ Pistkartor</button>
+    <button id="btnMaps" class="tool hidden" title="Officiella pistkartor (PDF)">⛷ Pistkartor</button>
+    <button id="btnPistmap" class="tool hidden" title="Interaktiv pistkarta">🗺️ Pistkarta</button>
     <button id="btnSeason" class="tool" title="Växla till vintervy">❄️ Vinter</button>
     <button id="btnLogin" class="tool" title="Logga in för att redigera">✎ Redigera</button>
   </div>
@@ -73,6 +74,16 @@
     <div id="pistemapsBody"></div>
   </aside>
 
+  <!-- Interaktiv 2D-pistkarta -->
+  <aside id="pistmap" class="hidden" aria-hidden="true">
+    <div id="pm-map"></div>
+    <button id="pistmapClose" class="panel-close" aria-label="Stäng">✕</button>
+    <div id="pm-foot">
+      <span class="pm-hint">Håll muspekaren över en lift eller nedfart – den visas även på 3D-kartan.</span>
+      <a id="pm-official" href="#" target="_blank" rel="noopener" class="pm-link hidden">Officiell karta ↗</a>
+    </div>
+  </aside>
+
   <!-- Statusrad -->
   <div id="status" class="hidden"></div>
 
@@ -98,6 +109,6 @@
   <script src="profile.js?v=19"></script>
   <script src="lifts.js?v=19"></script>
   <script src="pistes.js?v=19"></script>
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>
