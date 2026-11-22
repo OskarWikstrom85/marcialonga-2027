@@ -67,6 +67,7 @@
       "plan-lines": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
       "plan-nums": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
       "linkhl": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+      "linkhl-num": { type: "geojson", data: { type: "FeatureCollection", features: [] } },
     };
     const baseLayers = [];
     if (cfgHas("MAPTILER_KEY")) {
@@ -97,6 +98,9 @@
         { id: "route-pos-dot", type: "circle", source: "route-pos", layout: { visibility: "none" }, paint: { "circle-radius": 7, "circle-color": "#ff6a2b", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } },
         { id: "linkhl-casing", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#1b1200", "line-width": 10, "line-opacity": 0.55 } },
         { id: "linkhl-line", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ffe100", "line-width": 5 } },
+        { id: "linkhl-num-l", type: "symbol", source: "linkhl-num",
+          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 15, "text-allow-overlap": true, "text-ignore-placement": true },
+          paint: { "text-color": "#ffffff", "text-halo-color": ["get", "color"], "text-halo-width": 3.6 } },
       ],
     };
     return { style, terrainSource: "terrarium", terrainTiles: null };
@@ -604,6 +608,7 @@
   let plans = [], curPlan = null, planOpen = false, planAddMode = false;
   function pisteById(id) { return (window.CANAZEI_PISTES || []).find((p) => p.id === id); }
   function liftById2(id) { return (window.CANAZEI_LIFTS || []).find((l) => l.id === id); }
+  function refOf(kind, id) { const m = (window.CANAZEI_REFS || {})[kind === "lift" ? "L" : "P"] || {}; return m[id] || null; }
   function dxy(a, b) { const kx = Math.cos(a[1] * Math.PI / 180); return Math.hypot((a[0] - b[0]) * kx, a[1] - b[1]); }
   function distM(a, b) { return dxy(a, b) * 111320; }
   function liftEnds(l) { return [l.coords[0], l.coords[l.coords.length - 1]]; }
@@ -854,12 +859,23 @@
     const b = new maplibregl.LngLatBounds(); g.forEach((c) => b.extend(c));
     if (!pmap.getBounds().contains(b.getCenter())) pmap.easeTo({ center: b.getCenter(), duration: 500 });
   }
+  function setLinkNum(kind, id) {
+    if (!map.getSource("linkhl-num")) return;
+    const nr = refOf(kind, id);
+    let mid = null;
+    if (kind === "lift") { const l = liftById2(id); mid = l && (l.mid || (l.coords && l.coords[l.coords.length >> 1])); }
+    else { const p = pisteById(id); mid = p && p.geom && p.geom[p.geom.length >> 1]; }
+    if (nr && mid) {
+      const color = kind === "lift" ? "#1e40af" : (DIFF_COLOR[(pisteById(id) || {}).diff] || "#e23b3b");
+      map.getSource("linkhl-num").setData({ type: "Feature", properties: { ref: nr, color }, geometry: { type: "Point", coordinates: mid } });
+    } else map.getSource("linkhl-num").setData({ type: "FeatureCollection", features: [] });
+  }
   function linkHover(kind, id, from) {
     const key = kind + ":" + id;
-    if (key !== linkCur) { linkCur = key; const g = linkGeom(kind, id); setHL(map, "linkhl", g); if (pmap) setHL(pmap, "pm-hl", g); }
+    if (key !== linkCur) { linkCur = key; const g = linkGeom(kind, id); setHL(map, "linkhl", g); if (pmap) setHL(pmap, "pm-hl", g); setLinkNum(kind, id); }
     if (from === "main") ensurePmVisible(kind, id);
   }
-  function clearLink() { linkCur = null; setHL(map, "linkhl", null); if (pmap) setHL(pmap, "pm-hl", null); }
+  function clearLink() { linkCur = null; setHL(map, "linkhl", null); if (pmap) setHL(pmap, "pm-hl", null); if (map.getSource("linkhl-num")) map.getSource("linkhl-num").setData({ type: "FeatureCollection", features: [] }); }
 
   function buildPmap() {
     if (pmap) return;
@@ -984,7 +1000,7 @@
     const dropTxt = lf.drop != null ? lf.drop + " hm" : "–";
     v.innerHTML = `
       <button class="link-back" id="toList">‹ Tillbaka</button>
-      <span class="wp-badge">🚠 ${esc(LIFT_TYPE_SV[lf.type] || "Lift")}</span>
+      <span class="wp-badge">🚠 ${esc(LIFT_TYPE_SV[lf.type] || "Lift")}${refOf("lift", lf.id) ? " · Nr " + esc(refOf("lift", lf.id)) : ""}</span>
       <h2 class="wp-title">${esc(lf.name)}</h2>
       <div class="lift-stats">
         <div class="lift-stat"><span class="ls-ic">📏</span><div><div class="ls-val">${lenTxt}</div><div class="ls-lbl">Längd</div></div></div>
@@ -1277,10 +1293,12 @@
       selectedId = t.id; highlightWp(t.id);
     } else if (t.kind === "piste") {
       const p = pisteById(t.id); if (!p) return;
-      name = (p.name || "Namnlös nedfart") + " · " + (DIFF_SV[p.diff] || "pist"); icon = "⬇"; color = DIFF_COLOR[p.diff] || "#8aa0b4";
+      const nr = refOf("piste", t.id);
+      name = (nr ? nr + " · " : "") + (p.name || "Namnlös nedfart") + " · " + (DIFF_SV[p.diff] || "pist"); icon = "⬇"; color = DIFF_COLOR[p.diff] || "#8aa0b4";
     } else {
       const lf = (window.CANAZEI_LIFTS || []).find((l) => l.id === t.id); if (!lf) return;
-      name = lf.name; icon = "🚠"; color = "#2b6cb0"; highlightLiftPoint(t.id);
+      const nr = refOf("lift", t.id);
+      name = (nr ? nr + " · " : "") + lf.name; icon = "🚠"; color = "#2b6cb0"; highlightLiftPoint(t.id);
     }
     $("peekIc").textContent = icon; $("peekIc").style.background = color;
     $("peekName").textContent = name;
