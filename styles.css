@@ -1,7 +1,8 @@
 :root{
-  --bg:#0f1720; --panel:#141c26; --panel2:#1b2735; --line:#2a3647;
-  --text:#eaf0f7; --muted:#9fb0c3; --accent:#ff6a2b; --accent2:#2bb3ff;
-  --ok:#36c07a; --radius:14px; --shadow:0 10px 30px rgba(0,0,0,.35);
+  --bg:#0e1620; --panel:#16202c; --panel2:#1f2b39; --line:#2c3a4d;
+  --text:#eef3f9; --muted:#9fb2c6; --accent:#39b7ff; --accent2:#2bb3ff;
+  --race:#ff6a2b; --ontint:#06121c;
+  --ok:#36c07a; --radius:14px; --shadow:0 12px 34px rgba(0,0,0,.42);
   --font:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box}
@@ -16,21 +17,24 @@ html,body{margin:0;height:100%;font-family:var(--font);color:var(--text);backgro
 .brand-sub{color:var(--muted);font-size:12.5px;margin-top:2px}
 
 /* Verktygsrad */
-#toolbar{position:absolute;top:14px;right:14px;z-index:5;display:flex;gap:8px}
+#toolbar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:10;display:flex;gap:8px;
+  max-width:calc(100vw - 20px);overflow-x:auto;overflow-y:hidden;padding:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+#toolbar::-webkit-scrollbar{display:none}
+.tool{flex:0 0 auto}
 .tool{background:rgba(15,23,32,.72);backdrop-filter:blur(8px);color:var(--text);
   border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:13px;
   cursor:pointer;box-shadow:var(--shadow)}
 .tool:hover{border-color:var(--accent)}
-.tool.active{background:var(--accent);color:#1a0f08;border-color:var(--accent);font-weight:700}
+.tool.active{background:var(--accent);color:var(--ontint);border-color:var(--accent);font-weight:700}
 
 /* Flytande knapp – lista */
-.fab{position:absolute;left:14px;bottom:26px;z-index:5;width:46px;height:46px;border-radius:50%;
+.fab{position:absolute;left:14px;bottom:72px;z-index:5;width:46px;height:46px;border-radius:50%;
   background:rgba(15,23,32,.82);color:var(--text);border:1px solid var(--line);font-size:18px;
   cursor:pointer;box-shadow:var(--shadow)}
 .fab:hover{border-color:var(--accent)}
 
 /* Panel */
-#panel{position:absolute;top:0;right:0;height:100%;width:min(94vw,380px);z-index:8;
+#panel{position:absolute;top:0;right:0;bottom:70px;width:min(88vw,340px);z-index:8;
   background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);
   transform:translateX(100%);transition:transform .25s ease;overflow-y:auto;padding:52px 18px 24px}
 #panel:not(.hidden){transform:translateX(0)}
@@ -60,7 +64,7 @@ textarea{min-height:120px;resize:vertical}
 .row{display:flex;gap:10px}
 .row>div{flex:1}
 .btns{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
-.btn-primary{background:var(--accent);color:#1a0f08;border:none;border-radius:10px;padding:10px 14px;
+.btn-primary{background:var(--accent);color:var(--ontint);border:none;border-radius:10px;padding:10px 14px;
   font-weight:700;cursor:pointer;font-size:14px}
 .btn-primary:hover{filter:brightness(1.05)}
 .btn-ghost{background:transparent;color:var(--text);border:1px solid var(--line);border-radius:10px;
@@ -86,7 +90,7 @@ textarea{min-height:120px;resize:vertical}
 .mk.sel{outline:3px solid var(--accent);outline-offset:2px}
 
 /* Statusrad */
-#status{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:9;
+#status{position:absolute;left:50%;bottom:74px;transform:translateX(-50%);z-index:9;
   background:rgba(15,23,32,.92);border:1px solid var(--line);border-radius:999px;
   padding:9px 16px;font-size:13px;box-shadow:var(--shadow);max-width:90vw;text-align:center}
 #status.ok{border-color:var(--ok)}
@@ -106,7 +110,7 @@ textarea{min-height:120px;resize:vertical}
 /* Redigeringsläge-banner */
 body.editing #brand{border-color:var(--accent)}
 .editbadge{display:none;position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:6;
-  background:var(--accent);color:#1a0f08;font-weight:700;font-size:12.5px;padding:6px 12px;
+  background:var(--accent);color:var(--ontint);font-weight:700;font-size:12.5px;padding:6px 12px;
   border-radius:999px;box-shadow:var(--shadow)}
 body.editing .editbadge{display:block}
 
@@ -121,7 +125,7 @@ body.editing .editbadge{display:block}
   background:rgba(15,23,32,.9);color:var(--text);border:1.5px solid var(--accent);
   border-radius:999px;padding:9px 15px;font-weight:700;font-size:15px;white-space:nowrap;
   box-shadow:0 6px 20px rgba(0,0,0,.45);transition:transform .12s,background .12s}
-.course-pill:hover{transform:scale(1.05);background:var(--accent);color:#1a0f08}
+.course-pill:hover{transform:scale(1.05);background:var(--accent);color:var(--ontint)}
 .course-pill .cp-arrow{font-size:18px;opacity:.8}
 .course-pill .cp-ic{font-size:16px}
 
@@ -225,8 +229,8 @@ body.in-course .fab{display:flex;align-items:center;justify-content:center}
 .grp-form label.chk input{width:auto;margin:0}
 
 /* Banprofil (höjdprofil-låda i underkant) */
-#profile{position:fixed;left:0;right:0;bottom:0;z-index:18;background:rgba(15,23,32,.95);
-  backdrop-filter:blur(8px);border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(0,0,0,.35);padding:8px 12px 10px}
+#profile{position:fixed;left:0;right:0;bottom:64px;z-index:18;background:rgba(14,22,32,.96);
+  backdrop-filter:blur(8px);border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(0,0,0,.4);padding:8px 12px 10px}
 #profile.hidden{display:none}
 .prof-head{display:flex;align-items:center;gap:12px;margin-bottom:4px}
 .prof-title{font-weight:700;font-size:14px;color:var(--text)}
@@ -239,10 +243,10 @@ body.in-course .fab{display:flex;align-items:center;justify-content:center}
 .pf-ax{fill:#6c8097;font-size:10.5px}
 .pf-tip{fill:#eaf1f8;font-size:11.5px;font-weight:600}
 .pf-wp{cursor:pointer}
-body.prof-open .fab{bottom:214px}
+body.prof-open .fab{bottom:262px}
 
 /* Dagsplanerare */
-#planner{position:absolute;top:0;right:0;height:100%;width:min(94vw,380px);z-index:9;
+#planner{position:absolute;top:0;right:0;bottom:70px;width:min(88vw,340px);z-index:9;
   background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);
   transform:translateX(100%);transition:transform .25s ease;overflow-y:auto;padding:52px 18px 24px}
 #planner:not(.hidden){transform:translateX(0)}
@@ -274,7 +278,7 @@ body.prof-open .fab{bottom:214px}
 .plan-save button{flex:1 1 auto}
 
 /* Pistkartor */
-#pistemaps{position:absolute;top:0;right:0;height:100%;width:min(94vw,380px);z-index:9;
+#pistemaps{position:absolute;top:0;right:0;bottom:70px;width:min(88vw,340px);z-index:9;
   background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);
   transform:translateX(100%);transition:transform .25s ease;overflow-y:auto;padding:52px 18px 24px}
 #pistemaps:not(.hidden){transform:translateX(0)}
@@ -292,7 +296,7 @@ body.prof-open .fab{bottom:214px}
 .map-open{font-size:12.5px;color:var(--accent);margin-top:8px;font-weight:600}
 
 /* Interaktiv 2D-pistkarta */
-#pistmap{position:absolute;top:0;right:0;height:100%;width:56vw;z-index:9;background:#0d1117;
+#pistmap{position:absolute;top:0;right:0;bottom:70px;width:56vw;z-index:9;background:#0d1117;
   border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .28s ease}
 #pistmap:not(.hidden){transform:translateX(0)}
 #pistmap.hidden{transform:translateX(100%)}
@@ -306,4 +310,4 @@ body.prof-open .fab{bottom:214px}
 .pm-boende{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50% 50% 50% 2px;
   transform:rotate(45deg);background:#f59e0b;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer}
 .pm-boende span{transform:rotate(-45deg);font-size:15px;line-height:1}
-@media(max-width:760px){ #pistmap{width:100vw} .pm-hint{display:none} }
+@media(max-width:760px){ #pistmap{width:92vw} .pm-hint{display:none} }
