@@ -96,8 +96,8 @@
         { id: "plan-line", type: "line", source: "plan-lines", layout: { visibility: "none", "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5 } },
         { id: "plan-nums", type: "symbol", source: "plan-nums", layout: { visibility: "none", "text-field": ["get", "n"], "text-font": ["Open Sans Bold"], "text-size": 13, "text-allow-overlap": true }, paint: { "text-color": "#fff", "text-halo-color": "#0b1a2a", "text-halo-width": 2.5 } },
         { id: "route-pos-dot", type: "circle", source: "route-pos", layout: { visibility: "none" }, paint: { "circle-radius": 7, "circle-color": "#ff6a2b", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } },
-        { id: "linkhl-casing", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#1b1200", "line-width": 10, "line-opacity": 0.55 } },
-        { id: "linkhl-line", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ffe100", "line-width": 5 } },
+        { id: "linkhl-casing", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["coalesce", ["get", "casing"], "#1b1200"], "line-width": 10, "line-opacity": 0.7 } },
+        { id: "linkhl-line", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["coalesce", ["get", "color"], "#ffd400"], "line-width": 5 } },
         { id: "linkhl-num-l", type: "symbol", source: "linkhl-num",
           layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 15, "text-allow-overlap": true, "text-ignore-placement": true, "text-offset": [0, -0.7], "text-anchor": "bottom" },
           paint: { "text-color": "#ffffff", "text-halo-color": ["get", "color"], "text-halo-width": 3.6 } },
@@ -856,10 +856,11 @@
       .filter((w) => { const g = groupById(w.group_id); return g && /boende/i.test(g.name || ""); });
   }
   function linkGeom(kind, id) { if (kind === "lift") { const l = liftById2(id); return l ? l.coords : null; } const p = pisteById(id); return p ? p.geom : null; }
-  function setHL(m, src, geom) {
+  function setHL(m, src, geom, color, casing) {
     if (!m || !m.getSource(src)) return;
-    m.getSource(src).setData(geom ? { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: geom } } : { type: "FeatureCollection", features: [] });
+    m.getSource(src).setData(geom ? { type: "Feature", properties: { color: color || "#ffd400", casing: casing || "#1b1200" }, geometry: { type: "LineString", coordinates: geom } } : { type: "FeatureCollection", features: [] });
   }
+  function hlColors(kind) { return kind === "lift" ? { color: "#111111", casing: "#ffffff" } : { color: "#ffd400", casing: "#3a2f00" }; }
   function ensurePmVisible(kind, id) {
     if (!pmap) return; const g = linkGeom(kind, id); if (!g || !g.length) return;
     const b = new maplibregl.LngLatBounds(); g.forEach((c) => b.extend(c));
@@ -879,7 +880,7 @@
   }
   function linkHover(kind, id, from) {
     const key = kind + ":" + id;
-    if (key !== linkCur) { linkCur = key; const g = linkGeom(kind, id); setHL(map, "linkhl", g); if (pmap) setHL(pmap, "pm-hl", g); setLinkNum(kind, id); }
+    if (key !== linkCur) { linkCur = key; const g = linkGeom(kind, id); const hc = hlColors(kind); setHL(map, "linkhl", g, hc.color, hc.casing); if (pmap) setHL(pmap, "pm-hl", g, hc.color, hc.casing); setLinkNum(kind, id); }
     if (from === "main") ensurePmVisible(kind, id);
   }
   function clearLink() { linkCur = null; setHL(map, "linkhl", null); if (pmap) setHL(pmap, "pm-hl", null); if (map.getSource("linkhl-num")) map.getSource("linkhl-num").setData({ type: "FeatureCollection", features: [] }); }
@@ -920,8 +921,8 @@
       layers: [
         { id: "pmbase-l", type: "raster", source: "pmbase" },
         { id: "pmsnow-l", type: "raster", source: "pmsnow" },
-        { id: "pm-hl-casing", type: "line", source: "pm-hl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#1b1200", "line-width": 11, "line-opacity": 0.5 } },
-        { id: "pm-hl-line", type: "line", source: "pm-hl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ff2d2d", "line-width": 5 } },
+        { id: "pm-hl-casing", type: "line", source: "pm-hl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["coalesce", ["get", "casing"], "#1b1200"], "line-width": 11, "line-opacity": 0.6 } },
+        { id: "pm-hl-line", type: "line", source: "pm-hl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["coalesce", ["get", "color"], "#ffd400"], "line-width": 5 } },
         { id: "pm-pistes-hit", type: "line", source: "pm-pistes", paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 16 } },
         { id: "pm-lifts-hit", type: "line", source: "pm-lifts", paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 16 } },
         { id: "pm-num-pistes", type: "symbol", source: "pm-num-pistes",
