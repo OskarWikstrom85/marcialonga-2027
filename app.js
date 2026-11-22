@@ -884,11 +884,11 @@
         { id: "pm-hl-line", type: "line", source: "pm-hl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ff2d2d", "line-width": 5 } },
         { id: "pm-pistes-hit", type: "line", source: "pm-pistes", paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 16 } },
         { id: "pm-lifts-hit", type: "line", source: "pm-lifts", paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 16 } },
-        { id: "pm-num-pistes", type: "symbol", source: "pm-num-pistes", minzoom: 13, maxzoom: 14,
-          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 12, "text-allow-overlap": true, "text-ignore-placement": true },
+        { id: "pm-num-pistes", type: "symbol", source: "pm-num-pistes",
+          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 12, "text-allow-overlap": true, "text-ignore-placement": false },
           paint: { "text-color": ["get", "color"], "text-halo-color": "#ffffff", "text-halo-width": 2.4 } },
-        { id: "pm-num-lifts", type: "symbol", source: "pm-num-lifts", minzoom: 12.5, maxzoom: 14,
-          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 12.5, "text-allow-overlap": true, "text-ignore-placement": true },
+        { id: "pm-num-lifts", type: "symbol", source: "pm-num-lifts",
+          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 12.5, "text-allow-overlap": true, "text-ignore-placement": false },
           paint: { "text-color": "#ffffff", "text-halo-color": ["get", "color"], "text-halo-width": 3.4 } },
       ],
     };
@@ -901,9 +901,18 @@
       pmap.on("mousemove", "pm-pistes-hit", hover("piste"));
       pmap.on("mousemove", "pm-lifts-hit", hover("lift"));
       ["pm-pistes-hit", "pm-lifts-hit"].forEach((l) => pmap.on("mouseleave", l, () => { pmap.getCanvas().style.cursor = ""; clearLink(); }));
-      // Tvinga fram symbol-placering (nummer-etiketterna placeras annars inte vid första laddning)
-      setTimeout(() => { try { pmap.getSource("pm-num-pistes").setData(numFC("piste")); pmap.getSource("pm-num-lifts").setData(numFC("lift")); } catch (e) {} }, 200);
+      // Nummer-etiketterna placeras inte av MapLibre vid första laddning – tvinga fram det med en setData-knuff
+      // medan lagret är synligt, och styr sedan synlighet per zoom (mina 12,5–14, OpenSnowMaps egna tar vid 14+).
+      setTimeout(() => { try { pmap.getSource("pm-num-pistes").setData(numFC("piste")); pmap.getSource("pm-num-lifts").setData(numFC("lift")); pmSyncNums(); } catch (e) {} }, 150);
+      pmap.on("moveend", pmSyncNums);
     });
+  }
+  function pmSyncNums() {
+    if (!pmap) return;
+    const z = pmap.getZoom();
+    const set = (id, on) => { if (pmap.getLayer(id)) pmap.setLayoutProperty(id, "visibility", on ? "visible" : "none"); };
+    set("pm-num-lifts", z >= 12.5 && z < 14);
+    set("pm-num-pistes", z >= 13 && z < 14);
   }
   function pmAddBoende() {
     pmBoendeMarkers.forEach((m) => m.remove()); pmBoendeMarkers = [];
