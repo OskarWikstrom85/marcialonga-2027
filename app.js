@@ -288,7 +288,7 @@
       const f = map.queryRenderedFeatures(e.point, { layers: ["lift-clusters"] })[0]; if (!f) return;
       map.getSource("lifts").getClusterExpansionZoom(f.properties.cluster_id).then((z) => map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.3, pitch: 45 })).catch(() => {});
     });
-    map.on("click", "lift-hit", (e) => { if (!e.features || !e.features[0]) return; const id = e.features[0].properties.id; if (planAddMode) addStep("lift", id); else selectLift(id, true); });
+    map.on("click", "lift-hit", (e) => { if (!e.features || !e.features[0]) return; const id = e.features[0].properties.id; if (planAddMode) addStep("lift", id); else { selectLift(id, true); if (pmOpen) panPmap("lift", id); } });
     ["lift-clusters", "lift-hit"].forEach((id) => {
       map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
       map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
@@ -786,7 +786,7 @@
   }
   function togglePlanner() { planOpen ? closePlanner() : openPlanner(); }
   function registerPisteHandlers() {
-    map.on("click", "pistes-hit", (e) => { if (!e.features || !e.features[0]) return; const id = e.features[0].properties.id; if (planAddMode) addStep("piste", id); else showPeek({ kind: "piste", id }); });
+    map.on("click", "pistes-hit", (e) => { if (!e.features || !e.features[0]) return; const id = e.features[0].properties.id; if (planAddMode) addStep("piste", id); else { showPeek({ kind: "piste", id }); if (pmOpen) panPmap("piste", id); } });
     map.on("mouseenter", "pistes-hit", () => map.getCanvas().style.cursor = "pointer");
     map.on("mouseleave", "pistes-hit", () => map.getCanvas().style.cursor = "");
   }
@@ -863,10 +863,10 @@
     m.getSource(src).setData(geom ? { type: "Feature", properties: { color: color || "#ffd400", casing: casing || "#1b1200" }, geometry: { type: "LineString", coordinates: geom } } : { type: "FeatureCollection", features: [] });
   }
   function hlColors(kind) { return kind === "lift" ? { color: "#111111", casing: "#ffffff" } : { color: "#ffd400", casing: "#3a2f00" }; }
-  function ensurePmVisible(kind, id) {
+  function panPmap(kind, id) {
     if (!pmap) return; const g = linkGeom(kind, id); if (!g || !g.length) return;
     const b = new maplibregl.LngLatBounds(); g.forEach((c) => b.extend(c));
-    if (!pmap.getBounds().contains(b.getCenter())) pmap.easeTo({ center: b.getCenter(), duration: 500 });
+    pmap.easeTo({ center: b.getCenter(), duration: 600 });
   }
   function setLinkNum(kind, id) {
     if (!map.getSource("linkhl-num")) return;
@@ -883,7 +883,6 @@
   function linkHover(kind, id, from) {
     const key = kind + ":" + id;
     if (key !== linkCur) { linkCur = key; const g = linkGeom(kind, id); const hc = hlColors(kind); setHL(map, "linkhl", g, hc.color, hc.casing); if (pmap) setHL(pmap, "pm-hl", g, hc.color, hc.casing); setLinkNum(kind, id); }
-    if (from === "main") ensurePmVisible(kind, id);
   }
   function clearLink() { linkCur = null; setHL(map, "linkhl", null); if (pmap) setHL(pmap, "pm-hl", null); if (map.getSource("linkhl-num")) map.getSource("linkhl-num").setData({ type: "FeatureCollection", features: [] }); }
 
