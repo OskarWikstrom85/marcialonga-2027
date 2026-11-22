@@ -99,7 +99,7 @@
         { id: "linkhl-casing", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#1b1200", "line-width": 10, "line-opacity": 0.55 } },
         { id: "linkhl-line", type: "line", source: "linkhl", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ffe100", "line-width": 5 } },
         { id: "linkhl-num-l", type: "symbol", source: "linkhl-num",
-          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 15, "text-allow-overlap": true, "text-ignore-placement": true },
+          layout: { "text-field": ["get", "ref"], "text-font": ["Open Sans Bold"], "text-size": 15, "text-allow-overlap": true, "text-ignore-placement": true, "text-offset": [0, -0.7], "text-anchor": "bottom" },
           paint: { "text-color": "#ffffff", "text-halo-color": ["get", "color"], "text-halo-width": 3.6 } },
       ],
     };
@@ -868,6 +868,7 @@
     if (nr && mid) {
       const color = kind === "lift" ? "#1e40af" : (DIFF_COLOR[(pisteById(id) || {}).diff] || "#e23b3b");
       map.getSource("linkhl-num").setData({ type: "Feature", properties: { ref: nr, color }, geometry: { type: "Point", coordinates: mid } });
+      ["linkhl-casing", "linkhl-line", "linkhl-num-l"].forEach((lid) => { if (map.getLayer(lid)) map.moveLayer(lid); });
     } else map.getSource("linkhl-num").setData({ type: "FeatureCollection", features: [] });
   }
   function linkHover(kind, id, from) {
