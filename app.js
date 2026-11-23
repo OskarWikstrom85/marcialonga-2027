@@ -251,7 +251,8 @@
     });
     document.body.appendChild(menu);
     const r = btn.getBoundingClientRect();
-    menu.style.top = (r.bottom + 8) + "px";
+    // Verktygsraden ligger nederst – öppna menyn uppåt så alternativen syns.
+    menu.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + "px";
     menu.style.right = Math.max(8, window.innerWidth - r.right) + "px";
     modeMenuEl = menu;
     setTimeout(() => document.addEventListener("click", onDocClickMode, true), 0);
